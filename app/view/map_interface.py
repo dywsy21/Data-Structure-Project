@@ -387,8 +387,6 @@ class MapInterface(QWidget):
         min_distance = None
         nearest_node_id = None
         for node_id, (lat, lon) in self.nodes.items():
-            # Assuming each node has a 'highway' tag stored somewhere; 
-            # you might need to adjust this based on your data structure
             highway_type = self.get_highway_type_for_node(node_id)
             if highway_type not in whitelist:
                 continue
@@ -489,6 +487,15 @@ class MapInterface(QWidget):
             self.display_path(path)
             self.infoArea.setText(
                 f"Shortest path from {self.selectedNodes[0]} to {self.selectedNodes[1]}:\n" + "\n".join(path)
+            )
+            InfoBar.success(
+                title="Success",
+                content="Shortest path found successfully!",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM_RIGHT,
+                duration=2000,
+                parent=self
             )
         else:
             self.infoArea.setText("No path found between the selected nodes.")

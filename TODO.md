@@ -8,3 +8,9 @@
 5. allow user to select their map file
 <!-- 6. change finding_node to be async -->
 7. resolve the name overlapping issue
+8. add more path-finding algorithms
+9. use satellite image as background
+10. add routes to favorite
+11. calculate the estimated time duration for each means of transportation
+12. support adding middle points
+13. use realtime GPS location as start point, and dynamically calculate shortest path
