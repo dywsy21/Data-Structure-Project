@@ -17,7 +17,7 @@ args = [
     '--show-progress' ,
     '--windows-icon-from-ico=app/resource/images/logo.ico',
     '--include-module=app',
-    '--nofollow-import-to=pywin',
+    '--nofollow-import-to=pywin,numpy,scipy,PIL,colorthief',
     '--follow-import-to=win32com,win32gui,win32print,qfluentwidgets,app',
     '--output-dir=dist/main',
     'main.py',

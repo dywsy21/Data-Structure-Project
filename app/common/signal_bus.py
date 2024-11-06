@@ -7,6 +7,7 @@ class SignalBus(QObject):
 
     checkUpdateSig = pyqtSignal()
     micaEnableChanged = pyqtSignal(bool)
+    visitSourceCodeSig = pyqtSignal()
 
 
 signalBus = SignalBus()

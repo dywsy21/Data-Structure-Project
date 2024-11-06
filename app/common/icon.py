@@ -1,8 +1,6 @@
 # coding: utf-8
 from enum import Enum
-
 from qfluentwidgets import FluentIconBase, getIconColor, Theme
-
 
 class Icon(FluentIconBase, Enum):
 
@@ -10,7 +8,9 @@ class Icon(FluentIconBase, Enum):
 
     SETTINGS = "Settings"
     SETTINGS_FILLED = "SettingsFilled"
-    MAP = "Map"
+    MAP = "map"
+    APPICON = 'icon'
 
     def path(self, theme=Theme.AUTO):
+        # return fr".\app\resource\images\icons\{self.value}_{getIconColor(theme)}.svg"
         return f":/app/images/icons/{self.value}_{getIconColor(theme)}.svg"

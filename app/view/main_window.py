@@ -3,11 +3,11 @@ from PyQt5.QtCore import QUrl, QSize
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QApplication
 
-from qfluentwidgets import NavigationItemPosition, FluentWindow, SplashScreen
+from qfluentwidgets import *
 from qfluentwidgets import FluentIcon as FIF
 
 from .setting_interface import SettingInterface
-from .map_interface import MapInterface
+from .map_interface import MapInterface, QPixmap
 from ..common.config import cfg
 from ..common.icon import Icon
 from ..common.signal_bus import signalBus
@@ -21,7 +21,7 @@ class MainWindow(FluentWindow):
         self.initWindow()
 
         # 创建子界面
-        self.mapInterface = MapInterface(self)  # 创建地图界面实例
+        self.mapInterface = MapInterface(self)
         self.settingInterface = SettingInterface(self)
 
         self.connectSignalToSlot()
@@ -33,10 +33,9 @@ class MainWindow(FluentWindow):
         signalBus.micaEnableChanged.connect(self.setMicaEffectEnabled)
 
     def initNavigation(self):
-        # self.navigationInterface.setAcrylicEnabled(True)
-
+        self.navigationInterface.setAcrylicEnabled(True)
         # 添加导航项
-        self.addSubInterface(self.mapInterface, FIF.EXPRESSIVE_INPUT_ENTRY, self.tr('Map'))  # 添加地图界面到导航栏
+        self.addSubInterface(self.mapInterface, Icon.MAP, self.tr('Map'))  # 添加地图界面到导航栏
         self.addSubInterface(
             self.settingInterface, FIF.SETTING, self.tr('Settings'), NavigationItemPosition.BOTTOM)
 
@@ -45,7 +44,7 @@ class MainWindow(FluentWindow):
     def initWindow(self):
         self.resize(960, 780)
         self.setMinimumWidth(760)
-        self.setWindowIcon(QIcon(r'app\resource\images\logo.png'))
+        self.setWindowIcon(QIcon(Icon.APPICON.path()))
         self.setWindowTitle('Polaris')
 
         self.setCustomBackgroundColor(QColor(240, 244, 249), QColor(32, 32, 32))

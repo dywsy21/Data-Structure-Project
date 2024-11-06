@@ -12,9 +12,10 @@ from PyQt5.QtGui import QDesktopServices, QFont
 from PyQt5.QtWidgets import QWidget, QLabel, QFileDialog
 
 from ..common.config import cfg, isWin11
-from ..common.setting import HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR
+from ..common.setting import HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR, REPO_URL
 from ..common.signal_bus import signalBus
 from ..common.style_sheet import StyleSheet
+from ..common.icon import Icon
 
 
 class SettingCardGroup(CardGroup):
@@ -30,6 +31,7 @@ class SettingInterface(ScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
+        signalBus.visitSourceCodeSig.connect(self.visitSourceCode)
         self.scrollWidget = QWidget()
         self.expandLayout = ExpandLayout(self.scrollWidget)
 
@@ -72,8 +74,8 @@ class SettingInterface(ScrollArea):
         # application
         self.aboutGroup = SettingCardGroup(self.tr('About'), self.scrollWidget)
         self.aboutCard = PrimaryPushSettingCard(
-            self.tr('Check update'),
-            r"app\resource\images\logo.png",
+            self.tr('View Source Code'),
+            Icon.APPICON,
             self.tr('About'),
             '© ' + self.tr('Copyright') + f" {YEAR}, {AUTHOR}. " +
             self.tr('Version') + " " + VERSION,
@@ -81,6 +83,10 @@ class SettingInterface(ScrollArea):
         )
 
         self.__initWidget()
+
+    def visitSourceCode(self):
+        """ visit source code """
+        QDesktopServices.openUrl(QUrl(REPO_URL))
 
     def __initWidget(self):
         self.resize(1000, 800)
@@ -131,10 +137,7 @@ class SettingInterface(ScrollArea):
         """ connect signal to slot """
         cfg.appRestartSig.connect(self._showRestartTooltip)
 
-        # personalization
         cfg.themeChanged.connect(setTheme)
         self.micaCard.checkedChanged.connect(signalBus.micaEnableChanged)
 
-        # check update
-        self.aboutCard.clicked.connect(signalBus.checkUpdateSig)
-        
+        self.aboutCard.clicked.connect(signalBus.visitSourceCodeSig)

@@ -1,9 +1,14 @@
 # coding: utf-8
 from PyQt5.QtCore import Qt, QProcess, QPoint
-from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush
+from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor
 from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy
 from qfluentwidgets import * # type: ignore
 import xml.etree.ElementTree as ET
+from ..common.config import cfg, isWin11
+from ..common.style_sheet import StyleSheet
+from ..common.icon import Icon
+import os
+
 
 class MapGraphicsView(QGraphicsView):
     def __init__(self, *args, **kwargs):
@@ -13,6 +18,7 @@ class MapGraphicsView(QGraphicsView):
         self._panStartX = None
         self._panStartY = None
         self.scaleFactor = 1.0  # Keep track of the current scale factor
+        StyleSheet.MAP_INTERFACE.apply(self)
 
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() == Qt.ControlModifier:
@@ -66,11 +72,13 @@ class MapGraphicsView(QGraphicsView):
 class MapInterface(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.tag_colors = self.load_tag_colors()
         self.setObjectName("MapInterface")
         self.points = []
         self.nodes = {}  # Dictionary to store node data
         self.ways = []   # List to store way data
         self.drawnPaths = []  # List to store drawn paths
+        self.enclosed_tags = {'building', 'park', 'garden', 'leisure', 'landuse', 'natural', 'historic'}
         self.initUI()
 
     def initUI(self):
@@ -86,7 +94,7 @@ class MapInterface(QWidget):
         self.load_osm_data_and_draw_out(r'E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\backend\data\map_large')
         self.selectedNodes = []  # List to store selected node IDs
         self.pinItems = []       # List to store pin icons
-        self.iconPixmap = QPixmap(r'app\resource\images\location icon.png')  # Load the locating icon
+        self.iconPixmap = QPixmap(r':app/images/location icon.png')  # Load the locating icon
 
         # Lower Area (25% height)
         self.lowerWidget = QWidget(self)
@@ -115,6 +123,7 @@ class MapInterface(QWidget):
         self.lowerRightWidget.addWidget(self.resetButton)
 
         self.mainLayout.addWidget(self.lowerWidget, 1)  # Stretch factor 1
+        self.scene.setBackgroundBrush(QColor("#FFFFE0"))  # Set background to light yellow
     
     def reset(self):
         self.selectedNodes.clear()
@@ -138,12 +147,18 @@ class MapInterface(QWidget):
             lon = float(node.get('lon')) # type: ignore
             self.nodes[node_id] = (lat, lon)
 
+        # s = set()
         for way in root.findall('way'):
             way_id = way.get('id')
             node_refs = [nd.get('ref') for nd in way.findall('nd')]
             tags = {tag.get('k'): tag.get('v') for tag in way.findall('tag')}
+            # if tags.keys():
+            #     s.add(list(tags.keys())[0])
             self.ways.append({'id': way_id, 'nodes': node_refs, 'tags': tags})
-
+        # with open(r'e:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/tags.txt', 'w') as f:
+        #     for item in s:
+        #         if ":" not in item:
+        #             f.write(item + '\n')
         self.draw_map()
 
     def draw_map(self):
@@ -176,22 +191,43 @@ class MapInterface(QWidget):
             node_refs = way['nodes']
             first_point = True
             path = QPainterPath()
+            points = []
             for node_id in node_refs:
                 if node_id in self.nodes:
                     lat, lon = self.nodes[node_id]
                     x, y = map_to_scene(lat, lon)
+                    points.append((x, y))
                     if first_point:
                         path.moveTo(x, y)
                         first_point = False
                     else:
                         path.lineTo(x, y)
             if not first_point:
-                pathItem = QGraphicsPathItem(path)
-                pen = QPen(Qt.black)
-                pen.setWidthF(self.getPenWidth())
-                pathItem.setPen(pen)
-                self.scene.addItem(pathItem)
-                self.pathItems.append(pathItem)
+                tags = way['tags']
+                color = self.tag_colors.get(next(iter(tags), ''), QColor("#ADD8E6"))  # Changed from Qt.black to light blue
+                
+                # Check if the way is closed and has an enclosed tag
+                if any(tag in self.enclosed_tags for tag in tags) and node_refs[0] == node_refs[-1]:
+                    # Draw filled polygon for enclosed areas
+                    polygon = QPainterPath()
+                    polygon.moveTo(*points[0])
+                    for point in points[1:]:
+                        polygon.lineTo(*point)
+                    polygon.closeSubpath()
+                    polygonItem = QGraphicsPathItem(polygon)
+                    pen = QPen(color)
+                    pen.setWidthF(self.getPenWidth())
+                    polygonItem.setPen(pen)
+                    polygonItem.setBrush(QColor(color))
+                    self.scene.addItem(polygonItem)
+                    self.pathItems.append(polygonItem)
+                else:
+                    pen = QPen(color)
+                    pen.setWidthF(self.getPenWidth())
+                    pathItem = QGraphicsPathItem(path)
+                    pathItem.setPen(pen)
+                    self.scene.addItem(pathItem)
+                    self.pathItems.append(pathItem)
 
     def getPenWidth(self):
         # Calculate pen width based on the current scale factor
@@ -323,3 +359,18 @@ class MapInterface(QWidget):
             self.currentPathItem.setPen(pen)
             self.scene.addItem(self.currentPathItem)
             self.drawnPaths.append(self.currentPathItem)
+
+    def _connectSignalToSlot(self):
+        """ connect signal to slot """
+        cfg.themeChanged.connect(setTheme)
+
+    def load_tag_colors(self):
+        color_mapping = {}
+        tags_file = r'e:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/tags.txt'
+        if os.path.exists(tags_file):
+            with open(tags_file, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        tag, color = line.strip().split(':')
+                        color_mapping[tag] = QColor(color)
+        return color_mapping
