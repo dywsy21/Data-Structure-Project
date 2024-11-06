@@ -62,11 +62,11 @@ CMAKE_BINARY_DIR = "E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure 
 # Directory level rules for the build root directory
 
 # The main recursive "all" target.
-all:
+all: CMakeFiles/backend.dir/all
 .PHONY : all
 
 # The main recursive "codegen" target.
-codegen:
+codegen: CMakeFiles/backend.dir/codegen
 .PHONY : codegen
 
 # The main recursive "preinstall" target.
@@ -74,8 +74,39 @@ preinstall:
 .PHONY : preinstall
 
 # The main recursive "clean" target.
-clean:
+clean: CMakeFiles/backend.dir/clean
 .PHONY : clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/backend.dir
+
+# All Build rule for target.
+CMakeFiles/backend.dir/all:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/depend
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" --progress-num=1,2,3,4,5,6,7 "Built target backend"
+.PHONY : CMakeFiles/backend.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/backend.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start "E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" 7
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 CMakeFiles/backend.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start "E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" 0
+.PHONY : CMakeFiles/backend.dir/rule
+
+# Convenience name for target.
+backend: CMakeFiles/backend.dir/rule
+.PHONY : backend
+
+# codegen rule for target.
+CMakeFiles/backend.dir/codegen:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/codegen
+.PHONY : CMakeFiles/backend.dir/codegen
+
+# clean rule for target.
+CMakeFiles/backend.dir/clean:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/clean
+.PHONY : CMakeFiles/backend.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

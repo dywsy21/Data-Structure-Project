@@ -8,6 +8,7 @@ from ..common.config import cfg, isWin11
 from ..common.style_sheet import StyleSheet
 from ..common.icon import Icon
 import os
+import subprocess
 
 
 class MapGraphicsView(QGraphicsView):
@@ -318,11 +319,10 @@ class MapInterface(QWidget):
         if len(self.selectedNodes) < 2:
             self.infoArea.setText("Please select two nodes to calculate the shortest path.")
             return
-        
+
         node1_id, node2_id = self.selectedNodes
-        # Call the backend or implement the pathfinding algorithm
         path = self.find_shortest_path(node1_id, node2_id)
-        
+
         if path:
             self.display_path(path)
             self.infoArea.setText(f"Shortest path from {node1_id} to {node2_id}:\n" + "\n".join(path))
@@ -330,10 +330,18 @@ class MapInterface(QWidget):
             self.infoArea.setText("No path found between the selected nodes.")
 
     def find_shortest_path(self, node1_id, node2_id):
-        # Implement your pathfinding algorithm or call the backend
-        # For demonstration, return a list of node IDs forming a path
-        # Example:
-        return [node1_id, 'node_mid', node2_id]
+        try:
+            print("Querying " + node1_id + " and " + node2_id + "...")
+            result = subprocess.run(
+                ['build/backend.exe', node1_id, node2_id],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            path = result.stdout.strip().split('\n')
+            return path
+        except subprocess.CalledProcessError:
+            return None
 
     def display_path(self, path):
         # # Remove existing path items
