@@ -2,14 +2,14 @@
 import os
 import sys
 
-from PyQt5.QtCore import Qt, QTranslator
+from PyQt5.QtCore import Qt, QTranslator, QProcess, pyqtSignal, QDir
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication
-from qfluentwidgets import FluentTranslator
+from qfluentwidgets import FluentTranslator, InfoBar, InfoBarPosition  # Ensure InfoBar imports are present
 
 from app.common.config import cfg
 from app.view.main_window import MainWindow
-
+from app.common.signal_bus import signalBus
 
 # enable dpi scale
 if cfg.get(cfg.dpiScale) != "Auto":
@@ -21,8 +21,70 @@ else:
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
 
 
+class Application(QApplication):
+    # Remove the backend_started signal
+    # backend_started = pyqtSignal()
+
+    def __init__(self, argv):
+        super().__init__(argv)
+        self.backend_process = QProcess()
+        # Specify the absolute path to backend.exe or ensure it's in the current working directory
+        backend_path = r"E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\backend.exe"
+        self.backend_process.setProgram(backend_path)
+        
+        # # Optionally, set the working directory
+        # self.backend_process.setWorkingDirectory(QDir(backend_path).absolutePath())
+        
+        self.backend_process.setArguments([])
+        self.backend_process.readyReadStandardOutput.connect(self.handle_backend_output)
+        self.backend_process.readyReadStandardError.connect(self.handle_backend_error)
+        self.backend_process.started.connect(self.on_backend_started)
+        self.backend_process.errorOccurred.connect(self.handle_backend_error_occurred)  # Connect errorOccurred signal
+        self.backend_process.start()
+
+        # Connect the sendBackendRequest signal to the handler
+        signalBus.sendBackendRequest.connect(self.handle_send_backend_request)
+        
+    def handle_backend_output(self):
+        output = self.backend_process.readAllStandardOutput().data().decode()
+        signalBus.backendOutputReceived.emit(output)
+        if "Graph loaded successfully." in output:
+            signalBus.graphLoaded.emit()  # Emit the graphLoaded signal
+
+    def handle_backend_error(self):
+        error = self.backend_process.readAllStandardError().data().decode()
+        signalBus.backendErrorReceived.emit(error)
+
+    def on_backend_started(self):
+        # Emit the backendStarted signal via signalBus
+        signalBus.backendStarted.emit()
+
+    def handle_send_backend_request(self, request):
+        self.backend_process.write(request.encode())  # Add this method
+
+    def handle_backend_error_occurred(self, error):
+        error_messages = {
+            QProcess.FailedToStart: "Failed to start the backend process. Please check the executable path.",
+            QProcess.Crashed: "The backend process crashed.",
+            QProcess.Timedout: "The backend process timed out.",
+            QProcess.WriteError: "An error occurred when attempting to write to the backend process.",
+            QProcess.ReadError: "An error occurred when attempting to read from the backend process.",
+            QProcess.UnknownError: "An unknown error occurred with the backend process."
+        }
+        error_message = error_messages.get(error, "An undefined error occurred.")
+        InfoBar.error(
+            title="Backend Error",
+            content=error_message,
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=3000,
+            parent=None  # Adjust parent if necessary
+        )
+
+
 # create application
-app = QApplication(sys.argv)
+app = Application(sys.argv)
 app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
 
 # internationalization

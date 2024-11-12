@@ -9,6 +9,7 @@ from ..common.style_sheet import StyleSheet
 from ..common.icon import Icon
 import os
 import subprocess
+from ..common.signal_bus import signalBus
 
 
 class MapGraphicsView(QGraphicsView):
@@ -91,6 +92,10 @@ class MapInterface(QWidget):
         self.nameTagThreshold = 16    # Define the minimum scaleFactor to display name tags
         self.displayed_names = set()  # Set to track names already displayed
         self.initUI()
+        signalBus.backendOutputReceived.connect(self.handle_backend_response)
+        signalBus.backendErrorReceived.connect(self.handle_backend_error)
+        self.pending_requests = {}
+        self.request_id = 0
 
     def initUI(self):
         self.mainLayout = QVBoxLayout(self)
@@ -459,55 +464,45 @@ class MapInterface(QWidget):
         self.showPathButton.setEnabled(False)
         self.infoArea.setText("Calculating shortest path...")
 
-        # Start the asynchronous process
-        self.find_shortest_path(node1_id, node2_id)
+        # Send the search request to the backend via signalBus
+        request = f"{node1_id} {node2_id}\n"
+        signalBus.sendBackendRequest.emit(request)  # Ensure this line exists and is correct
 
-    def find_shortest_path(self, node1_id, node2_id):
-        # Create a QProcess instance if not already created
-        if self.process is None:
-            self.process = QProcess(self)
-            self.process.finished.connect(self.on_process_finished)
-            self.process.errorOccurred.connect(self.on_process_error)
-
-        # Build the command and arguments
-        command = 'build/backend.exe'
-        arguments = [node1_id, node2_id]
-
-        # Start the process
-        print(f"Starting process: {command} {node1_id} {node2_id}")
-        self.process.start(command, arguments)
-
-    def on_process_finished(self, exitCode, exitStatus):
-        # Read the full standard output
-        output = self.process.readAllStandardOutput().data().decode() # type: ignore
-        # Parse the output into a path
-        path = output.strip().split('\r\n')
-
-        if path and path[0] != '':
-            self.display_path(path)
-            self.infoArea.setText(
-                f"Shortest path from {self.selectedNodes[0]} to {self.selectedNodes[1]}:\n" + "\n".join(path)
-            )
-            InfoBar.success(
-                title="Success",
-                content="Shortest path found successfully!",
-                orient=Qt.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                duration=2000,
-                parent=self
-            )
-        else:
+    def handle_backend_response(self, output):
+        lines = output.strip().split('\n')
+        if "END" in lines:
+            end_index = lines.index("END")
+            path = lines[:end_index]
+            if path and path[0] != '':
+                # remove '\r' from each node id
+                for i in range(len(path)):
+                    path[i] = path[i].strip('\r')
+                # print(path)
+                self.display_path(path)
+                self.infoArea.setText(
+                    f"Shortest path from {self.selectedNodes[0]} to {self.selectedNodes[1]}:\n" + "\n".join(path)
+                )
+                InfoBar.success(
+                    title="Success",
+                    content="Shortest path found successfully!",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+            else:
+                self.infoArea.setText("No path found between the selected nodes.")
+        elif "NO PATH" in lines:
             self.infoArea.setText("No path found between the selected nodes.")
 
         # Re-enable the button
         self.showPathButton.setEnabled(True)
 
-    def on_process_error(self, error):
-        error_message = self.process.errorString() # type: ignore
+    def handle_backend_error(self, error):
         InfoBar.error(
             title="Error",
-            content=f"An error occurred while calculating the shortest path: {error_message}",
+            content=f"An error occurred while communicating with the backend: {error}",
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.BOTTOM_RIGHT,
@@ -517,9 +512,10 @@ class MapInterface(QWidget):
         self.showPathButton.setEnabled(True)
 
     def display_path(self, path):
-        # # Remove existing path items
-        # if hasattr(self, 'currentPathItem'):
-        #     self.scene.removeItem(self.currentPathItem)
+        # Remove existing path items
+        for path_item in self.drawnPaths:
+            self.scene.removeItem(path_item)
+        self.drawnPaths.clear()
         
         # Create a new path
         path_points = []
@@ -534,12 +530,12 @@ class MapInterface(QWidget):
             painter_path.moveTo(*path_points[0])
             for point in path_points[1:]:
                 painter_path.lineTo(*point)
-            self.currentPathItem = QGraphicsPathItem(painter_path)
+            path_item = QGraphicsPathItem(painter_path)
             pen = QPen(Qt.blue)
             pen.setWidthF(2 / self.view.scaleFactor)
-            self.currentPathItem.setPen(pen)
-            self.scene.addItem(self.currentPathItem)
-            self.drawnPaths.append(self.currentPathItem)
+            path_item.setPen(pen)
+            self.scene.addItem(path_item)
+            self.drawnPaths.append(path_item)
 
     def _connectSignalToSlot(self):
         """ connect signal to slot """

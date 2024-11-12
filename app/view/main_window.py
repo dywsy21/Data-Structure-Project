@@ -1,10 +1,11 @@
 # coding: utf-8
-from PyQt5.QtCore import QUrl, QSize
+from PyQt5.QtCore import QUrl, QSize, Qt  # Ensure Qt is imported
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QApplication
 
 from qfluentwidgets import *
 from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import InfoBar, InfoBarPosition  # Ensure InfoBar imports are present
 
 from .setting_interface import SettingInterface
 from .map_interface import MapInterface, QPixmap
@@ -31,6 +32,30 @@ class MainWindow(FluentWindow):
 
     def connectSignalToSlot(self):
         signalBus.micaEnableChanged.connect(self.setMicaEffectEnabled)
+        signalBus.backendStarted.connect(self.on_backend_started)  # Add this line
+        signalBus.graphLoaded.connect(self.on_graph_loaded)  # Add this line
+
+    def on_backend_started(self):
+        InfoBar.success(
+            title="Backend Started",
+            content="Backend is running in the background.",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=2000,
+            parent=self
+        )
+
+    def on_graph_loaded(self):
+        InfoBar.success(
+            title="Graph Loaded",
+            content="Backend: Graph loaded successfully.",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=2000,
+            parent=self
+        )
 
     def initNavigation(self):
         self.navigationInterface.setAcrylicEnabled(True)

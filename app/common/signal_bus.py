@@ -8,6 +8,10 @@ class SignalBus(QObject):
     checkUpdateSig = pyqtSignal()
     micaEnableChanged = pyqtSignal(bool)
     visitSourceCodeSig = pyqtSignal()
-
+    backendOutputReceived = pyqtSignal(str)
+    backendErrorReceived = pyqtSignal(str)
+    backendStarted = pyqtSignal()
+    sendBackendRequest = pyqtSignal(str)  # Already added
+    graphLoaded = pyqtSignal()  # Add this line
 
 signalBus = SignalBus()

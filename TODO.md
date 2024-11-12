@@ -14,3 +14,4 @@
 11. calculate the estimated time duration for each means of transportation
 12. support adding middle points
 13. use realtime GPS location as start point, and dynamically calculate shortest path
+14. let the backend run all the time
