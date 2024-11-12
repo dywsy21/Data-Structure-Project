@@ -1,7 +1,7 @@
 # coding: utf-8
 from PyQt5.QtCore import Qt, QProcess, QPoint
 from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor
-from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout
+from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout, QAction
 from qfluentwidgets import * # type: ignore
 import xml.etree.ElementTree as ET
 from ..common.config import cfg, isWin11
@@ -122,18 +122,19 @@ class MapInterface(QWidget):
 
         # Left Layout for LineEdits and Algorithm Button
         self.leftLayout = QVBoxLayout()
-        self.startLineEdit = LineEdit(self.lowerWidget)
-        self.endLineEdit = LineEdit(self.lowerWidget)
+        self.startLineEdit = SearchLineEdit(self.lowerWidget)
+        self.endLineEdit = SearchLineEdit(self.lowerWidget)
         self.algorithmButton = SplitPushButton('Select Algorithm', self.lowerWidget)
+
+        self.startLineEdit.setPlaceholderText("Select the start node")
+        self.endLineEdit.setPlaceholderText("Select the end node")
         
-        # Set maximum width for LineEdits to match the algorithm button
-        max_width = self.algorithmButton.sizeHint().width()
-        self.startLineEdit.setMaximumWidth(max_width)
-        self.endLineEdit.setMaximumWidth(max_width)
-        
+        self.startLineEdit.setMaximumWidth(230)
+        self.endLineEdit.setMaximumWidth(230)
+
+        self.leftLayout.addWidget(self.algorithmButton)
         self.leftLayout.addWidget(self.startLineEdit)
         self.leftLayout.addWidget(self.endLineEdit)
-        self.leftLayout.addWidget(self.algorithmButton)
 
         # Add completer for auto-suggest
         stands = [
@@ -191,7 +192,23 @@ class MapInterface(QWidget):
 
         self.mainLayout.addWidget(self.lowerWidget, 1)  # Stretch factor 1
         self.scene.setBackgroundBrush(QColor("#FFFFE0"))  # Set background to light yellow
-    
+
+        # Add algorithms to the algorithmButton
+        self.addAlgorithmsToButton()
+
+    def addAlgorithmsToButton(self):
+        self.menu = RoundMenu(parent=self)
+        algorithms = ["Dijkstra", "A*", "Bellman-Ford", "Floyd-Warshall"]
+        for algorithm in algorithms:
+            action = Action(algorithm, self)
+            action.triggered.connect(lambda checked, alg=algorithm: self.setAlgorithm(alg))
+            self.menu.addAction(action)
+        self.algorithmButton.setFlyout(self.menu)
+
+    def setAlgorithm(self, algorithm):
+        self.selectedAlgorithm = algorithm
+        self.algorithmButton.setText(f"Algorithm: {algorithm}")
+
     def reset(self):
         self.selectedNodes.clear()
         for item in self.pinItems:
@@ -433,6 +450,9 @@ class MapInterface(QWidget):
             distance = (scene_pos.x() - x)**2 + (scene_pos.y() - y)**2
             if distance is not None and distance < 500:
                 self.removeNodeFromSelectedNodes(node_id)
+        # remove the displayed path
+        for path in self.drawnPaths:
+            self.scene.removeItem(path)
 
     def find_nearest_node(self, point, return_distance=False):
         whitelist = self.get_whitelist()
@@ -558,10 +578,10 @@ class MapInterface(QWidget):
         self.showPathButton.setEnabled(True)
 
     def display_path(self, path):
-        # Remove existing path items
-        for path_item in self.drawnPaths:
-            self.scene.removeItem(path_item)
-        self.drawnPaths.clear()
+        # # Remove existing path items
+        # for path_item in self.drawnPaths:
+        #     self.scene.removeItem(path_item)
+        # self.drawnPaths.clear()
         
         # Create a new path
         path_points = []
