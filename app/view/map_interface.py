@@ -1,7 +1,7 @@
 # coding: utf-8
 from PyQt5.QtCore import Qt, QProcess, QPoint
 from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor
-from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem
+from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout
 from qfluentwidgets import * # type: ignore
 import xml.etree.ElementTree as ET
 from ..common.config import cfg, isWin11
@@ -91,6 +91,8 @@ class MapInterface(QWidget):
         self.textItems = []           # List to store text items
         self.nameTagThreshold = 16    # Define the minimum scaleFactor to display name tags
         self.displayed_names = set()  # Set to track names already displayed
+        self.gridSize = 100  # Define the size of each grid
+        self.grids = {}  # Dictionary to store grid data
         self.initUI()
         signalBus.backendOutputReceived.connect(self.handle_backend_response)
         signalBus.backendErrorReceived.connect(self.handle_backend_error)
@@ -118,27 +120,74 @@ class MapInterface(QWidget):
         self.lowerWidget = QWidget(self)
         self.lowerLayout = QHBoxLayout(self.lowerWidget)
 
-        self.lowerRightWidget = QVBoxLayout(self.lowerWidget)
+        # Left Layout for LineEdits and Algorithm Button
+        self.leftLayout = QVBoxLayout()
+        self.startLineEdit = LineEdit(self.lowerWidget)
+        self.endLineEdit = LineEdit(self.lowerWidget)
+        self.algorithmButton = SplitPushButton('Select Algorithm', self.lowerWidget)
         
-        # Info Area (Left)
-        self.infoArea = TextEdit(self.lowerWidget)
-        self.infoArea.setReadOnly(True)
-        self.lowerLayout.addWidget(self.infoArea)
+        # Set maximum width for LineEdits to match the algorithm button
+        max_width = self.algorithmButton.sizeHint().width()
+        self.startLineEdit.setMaximumWidth(max_width)
+        self.endLineEdit.setMaximumWidth(max_width)
+        
+        self.leftLayout.addWidget(self.startLineEdit)
+        self.leftLayout.addWidget(self.endLineEdit)
+        self.leftLayout.addWidget(self.algorithmButton)
 
-        self.lowerLayout.addLayout(self.lowerRightWidget)
+        # Add completer for auto-suggest
+        stands = [
+            "曲阳路"
+        ]
+        self.startCompleter = QCompleter(stands, self.startLineEdit)
+        self.startCompleter.setCaseSensitivity(Qt.CaseInsensitive)
+        self.startCompleter.setMaxVisibleItems(10)
+        self.startLineEdit.setCompleter(self.startCompleter)
 
-        # Show Shortest Path Button (Right)
+        self.endCompleter = QCompleter(stands, self.endLineEdit)
+        self.endCompleter.setCaseSensitivity(Qt.CaseInsensitive)
+        self.endCompleter.setMaxVisibleItems(10)
+        self.endLineEdit.setCompleter(self.endCompleter)
+
+        # Middle Layout for CheckBoxes
+        self.middleLayout = QGridLayout()
+        self.pedestrianCheckBox = CheckBox('Pedestrian', self.lowerWidget)
+        self.ridingCheckBox = CheckBox('Riding', self.lowerWidget)
+        self.drivingCheckBox = CheckBox('Driving', self.lowerWidget)
+        self.pubTransportCheckBox = CheckBox('Public Transport', self.lowerWidget)
+
+        self.pedestrianCheckBox.setChecked(self.pedestrain_enabled)
+        self.ridingCheckBox.setChecked(self.riding_enabled)
+        self.drivingCheckBox.setChecked(self.driving_enabled)
+        self.pubTransportCheckBox.setChecked(self.pubTransport_enabled)
+
+        self.pedestrianCheckBox.stateChanged.connect(lambda state: setattr(self, 'pedestrain_enabled', state == Qt.Checked))
+        self.ridingCheckBox.stateChanged.connect(lambda state: setattr(self, 'riding_enabled', state == Qt.Checked))
+        self.drivingCheckBox.stateChanged.connect(lambda state: setattr(self, 'driving_enabled', state == Qt.Checked))
+        self.pubTransportCheckBox.stateChanged.connect(lambda state: setattr(self, 'pubTransport_enabled', state == Qt.Checked))
+
+        self.middleLayout.addWidget(self.pedestrianCheckBox, 0, 0)
+        self.middleLayout.addWidget(self.ridingCheckBox, 0, 1)
+        self.middleLayout.addWidget(self.drivingCheckBox, 1, 0)
+        self.middleLayout.addWidget(self.pubTransportCheckBox, 1, 1)
+
+        # Right Layout for Buttons
+        self.rightLayout = QVBoxLayout()
         self.showPathButton = PushButton('Show Shortest Path', self.lowerWidget)
         self.showPathButton.setMinimumSize(150, 40)  # Set minimum size
-
         self.showPathButton.clicked.connect(self.calculate_shortest_path)
-        self.lowerRightWidget.addWidget(self.showPathButton)
-
         self.resetButton = PushButton('Reset', self.lowerWidget)
         self.resetButton.clicked.connect(self.reset)
         self.resetButton.setMinimumSize(150, 40)  # Set minimum size
+        self.rightLayout.addWidget(self.showPathButton)
+        self.rightLayout.addWidget(self.resetButton)
 
-        self.lowerRightWidget.addWidget(self.resetButton)
+        # Add spacing between layouts
+        self.lowerLayout.addLayout(self.leftLayout)
+        self.lowerLayout.addSpacing(100)
+        self.lowerLayout.addLayout(self.middleLayout)
+        self.lowerLayout.addSpacing(100)
+        self.lowerLayout.addLayout(self.rightLayout)
 
         self.mainLayout.addWidget(self.lowerWidget, 1)  # Stretch factor 1
         self.scene.setBackgroundBrush(QColor("#FFFFE0"))  # Set background to light yellow
@@ -149,7 +198,6 @@ class MapInterface(QWidget):
             self.scene.removeItem(item)
         self.pinItems.clear()
         # self.scene.removeItem(self.currentPathItem)
-        self.infoArea.clear()
         for path in self.drawnPaths:
             self.scene.removeItem(path)
         self.drawnPaths.clear()
@@ -462,7 +510,6 @@ class MapInterface(QWidget):
 
         # Disable the button to prevent multiple clicks
         self.showPathButton.setEnabled(False)
-        self.infoArea.setText("Calculating shortest path...")
 
         # Send the search request to the backend via signalBus
         request = f"{node1_id} {node2_id}\n"
@@ -479,9 +526,6 @@ class MapInterface(QWidget):
                     path[i] = path[i].strip('\r')
                 # print(path)
                 self.display_path(path)
-                self.infoArea.setText(
-                    f"Shortest path from {self.selectedNodes[0]} to {self.selectedNodes[1]}:\n" + "\n".join(path)
-                )
                 InfoBar.success(
                     title="Success",
                     content="Shortest path found successfully!",
@@ -492,9 +536,11 @@ class MapInterface(QWidget):
                     parent=self
                 )
             else:
-                self.infoArea.setText("No path found between the selected nodes.")
+                pass
+                # self.infoArea.setText("No path found between the selected nodes.")
         elif "NO PATH" in lines:
-            self.infoArea.setText("No path found between the selected nodes.")
+            pass
+            # self.infoArea.setText("No path found between the selected nodes.")
 
         # Re-enable the button
         self.showPathButton.setEnabled(True)
