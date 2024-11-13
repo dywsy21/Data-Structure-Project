@@ -93,11 +93,11 @@ class MapInterface(QWidget):
         self.displayed_names = set()  # Set to track names already displayed
         self.gridSize = 100  # Define the size of each grid
         self.grids = {}  # Dictionary to store grid data
+        self.selectedAlgorithm = None  # Add this line
+        self.algorithmWarningShown = False  # Add this line
         self.initUI()
         signalBus.backendOutputReceived.connect(self.handle_backend_response)
         signalBus.backendErrorReceived.connect(self.handle_backend_error)
-        self.pending_requests = {}
-        self.request_id = 0
 
         # Emit location suggestions initially
         self.update_location_suggestions(self.get_all_available_names())
@@ -189,6 +189,13 @@ class MapInterface(QWidget):
         self.rightLayout.addWidget(self.showPathButton)
         self.rightLayout.addWidget(self.resetButton)
 
+        self.progressBar = ProgressBar(self.lowerWidget)
+        self.progressBar.setMaximum(100)
+        self.progressBar.setValue(0)
+        self.progressBar.setVisible(False)
+
+        self.rightLayout.addWidget(self.progressBar)
+
         # Add spacing between layouts
         self.lowerLayout.addLayout(self.leftLayout)
         self.lowerLayout.addSpacing(100)
@@ -228,7 +235,9 @@ class MapInterface(QWidget):
         # clear the line edits
         self.startLineEdit.clear()
         self.endLineEdit.clear()
-            
+        self.showPathButton.setEnabled(True)
+        self.progressBar.setVisible(False)
+
     def get_whitelist(self):
         # Define mapping between modes and highway types
         modes_to_highway = {
@@ -556,15 +565,44 @@ class MapInterface(QWidget):
 
         node1_id, node2_id = self.selectedNodes
 
+        # Check if an algorithm is selected
+        if not self.selectedAlgorithm:
+            if not self.algorithmWarningShown:
+                InfoBar.warning(
+                    title="Warning",
+                    content="No algorithm selected. Using Dijkstra by default.",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+                self.algorithmWarningShown = True
+            self.selectedAlgorithm = "Dijkstra"
+
         # Disable the button to prevent multiple clicks
         self.showPathButton.setEnabled(False)
 
+        # Conditionally show the progress bar for algorithms other than Dijkstra and A*
+        if self.selectedAlgorithm not in ["Dijkstra", "A*"]:
+            self.progressBar.setValue(0)
+            self.progressBar.setVisible(True)
+        else:
+            self.progressBar.setVisible(False)
+
         # Send the search request to the backend via signalBus
-        request = f"{node1_id} {node2_id}\n"
-        signalBus.sendBackendRequest.emit(request)  # Ensure this line exists and is correct
+        request = f"{self.selectedAlgorithm} {node1_id} {node2_id}\n"
+        signalBus.sendBackendRequest.emit(request)
 
     def handle_backend_response(self, output):
         lines = output.strip().split('\n')
+        print(lines)
+        for line in lines:
+            if line.isdigit() and int(line) <= 100:
+                progress = int(line)
+                self.progressBar.setValue(progress)
+                return
+
         if "END" in lines:
             end_index = lines.index("END")
             path = lines[:end_index]
@@ -586,12 +624,45 @@ class MapInterface(QWidget):
             else:
                 pass
                 # self.infoArea.setText("No path found between the selected nodes.")
+                InfoBar.error(
+                    title="Error",
+                    content="No path found between the selected nodes.",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+
         elif "NO PATH" in lines:
-            pass
             # self.infoArea.setText("No path found between the selected nodes.")
+            InfoBar.error(
+                title="Error",
+                content="No path found between the selected nodes.",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM_RIGHT,
+                duration=2000,
+                parent=self
+            )
+
+        # Check for elapsed time
+        for line in lines:
+            if line.startswith("TIME"):
+                time_elapsed = line.split()[1]
+                InfoBar.info(
+                    title="Time Elapsed",
+                    content=f"Time taken to find the path: {time_elapsed}",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
 
         # Re-enable the button
         self.showPathButton.setEnabled(True)
+        self.progressBar.setVisible(False)
 
     def handle_backend_error(self, error):
         InfoBar.error(

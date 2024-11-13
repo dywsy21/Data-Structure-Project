@@ -18,4 +18,19 @@ std::vector<std::string> dijkstra(const std::unordered_map<std::string, std::vec
                                   const std::string& start,
                                   const std::string& end);
 
+// Function to find the shortest path using A* algorithm
+std::vector<std::string> a_star(const std::unordered_map<std::string, std::vector<Edge>>& graph,
+                                const std::string& start,
+                                const std::string& end);
+
+// Function to find the shortest path using Bellman-Ford algorithm
+std::vector<std::string> bellman_ford(const std::unordered_map<std::string, std::vector<Edge>>& graph,
+                                      const std::string& start,
+                                      const std::string& end);
+
+// Function to find the shortest path using Floyd-Warshall algorithm
+std::vector<std::string> floyd_warshall(const std::unordered_map<std::string, std::vector<Edge>>& graph,
+                                        const std::string& start,
+                                        const std::string& end);
+
 #endif // PATH_FINDING_H
