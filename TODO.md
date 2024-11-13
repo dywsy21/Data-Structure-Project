@@ -18,3 +18,4 @@
 15. Implement grid rendering
 <!-- 16. time the path finding process -->
 17. make the reset button able to stop calculation process
+<!-- 18. refine name display -->

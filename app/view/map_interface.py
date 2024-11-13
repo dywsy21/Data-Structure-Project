@@ -37,6 +37,7 @@ class MapGraphicsView(QGraphicsView):
             self.scale(zoomFactor, zoomFactor)
             self.scaleFactor *= zoomFactor  # Update the scale factor
 
+            self.parent_interface.displayed_names.clear()  # Clear the set when zooming
             # Update line thickness and icon scales based on new scale factor
             self.parentWidget().updateLineThickness(self.scaleFactor) # type: ignore
             # After zooming, redraw visible grids
@@ -75,6 +76,7 @@ class MapGraphicsView(QGraphicsView):
             super(MapGraphicsView, self).mouseReleaseEvent(event)
 
 class MapInterface(QWidget):
+    FIXED_FONT_SIZE = 10  # Define a constant for the fixed font size
     def __init__(self, parent=None):
         super().__init__(parent)
         self.tag_colors = self.load_tag_colors()
@@ -92,7 +94,7 @@ class MapInterface(QWidget):
         self.is_highway_node = {}
         self.process = None  # Add this line to initialize the process attribute
         self.textItems = []           # List to store text items
-        self.nameTagThreshold = 16    # Define the minimum scaleFactor to display name tags
+        self.nameTagThreshold = 22    # Define the minimum scaleFactor to display name tags
         self.displayed_names = set()  # Set to track names already displayed
         self.gridSize = 100  # Define the size of each grid
         self.grids = {}  # Dictionary to store grid data
@@ -443,15 +445,19 @@ class MapInterface(QWidget):
                 self.scene.addItem(pathItem)
                 items.append(pathItem)
                 # Handle text items within grid
-                if 'name' in tags and self.view.scaleFactor >= self.nameTagThreshold:
+                if 'name' in tags and tags['name'] not in self.displayed_names and self.view.scaleFactor >= self.nameTagThreshold:
                     name = tags['name']
                     text_item = QGraphicsTextItem(name)
-                    font = QFont("Arial", int(self.getFontSize()))
+                    font = QFont("Arial", self.FIXED_FONT_SIZE)  # Use the constant for the fixed font size
                     text_item.setFont(font)
+                    text_item.setZValue(1)  # Ensure the text is on top
                     # Position the text at the midpoint of the path
                     text_item.setPos(path.pointAtPercent(0.5))
+                    text_item.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)  # Ensure text size remains consistent
                     self.scene.addItem(text_item)
-                    items.append(text_item)
+                    # items.append(text_item)
+                    self.textItems.append(text_item)  # Store reference for updates
+                    self.displayed_names.add(name)  # Add name to the set to prevent duplication
         # Store the items associated with this grid
         self.grid_items[grid_key] = items
 
@@ -483,105 +489,109 @@ class MapInterface(QWidget):
         # Call this method when the map is panned
         self.draw_visible_grids()
 
-    def draw_map(self):
-        # Compute bounding box of all nodes
-        lats = [lat for lat, lon in self.nodes.values()]
-        lons = [lon for lat, lon in self.nodes.values()]
-        min_lat, max_lat = min(lats), max(lats)
-        min_lon, max_lon = min(lons), max(lons)
+    def handleMapZoom(self):
+        # Call this method when the map is zoomed
+        self.draw_visible_grids()
 
-        # Set scene dimensions
-        scene_width = 800
-        scene_height = 600
-        self.scene.setSceneRect(0, 0, scene_width, scene_height)
+    # def draw_map(self):
+    #     # Compute bounding box of all nodes
+    #     lats = [lat for lat, lon in self.nodes.values()]
+    #     lons = [lon for lat, lon in self.nodes.values()]
+    #     min_lat, max_lat = min(lats), max(lats)
+    #     min_lon, max_lon = min(lons), max(lons)
 
-        # Map lat/lon to scene coordinates
-        def map_to_scene(lat, lon):
-            x = (lon - min_lon) / (max_lon - min_lon) * scene_width
-            y = (lat - min_lat) / (max_lat - min_lat) * scene_height
-            y = scene_height - y  # Invert y-axis if necessary
-            return x, y
+    #     # Set scene dimensions
+    #     scene_width = 800
+    #     scene_height = 600
+    #     self.scene.setSceneRect(0, 0, scene_width, scene_height)
 
-        self.min_lat, self.max_lat = min_lat, max_lat
-        self.min_lon, self.max_lon = min_lon, max_lon
-        self.scene_width = scene_width
-        self.scene_height = scene_height
+    #     # Map lat/lon to scene coordinates
+    #     def map_to_scene(lat, lon):
+    #         x = (lon - min_lon) / (max_lon - min_lon) * scene_width
+    #         y = (lat - min_lat) / (max_lat - min_lat) * scene_height
+    #         y = scene_height - y  # Invert y-axis if necessary
+    #         return x, y
 
-        self.map_to_scene = map_to_scene  # Assign to instance for reuse
+    #     self.min_lat, self.max_lat = min_lat, max_lat
+    #     self.min_lon, self.max_lon = min_lon, max_lon
+    #     self.scene_width = scene_width
+    #     self.scene_height = scene_height
 
-        for way in self.ways.values():
-            node_refs = way['nodes']
-            first_point = True
-            path = QPainterPath()
-            points = []
-            for node_id in node_refs:
-                if node_id in self.nodes:
-                    lat, lon = self.nodes[node_id]
-                    x, y = self.map_to_scene(lat, lon)
-                    points.append((x, y))
-                    if first_point:
-                        path.moveTo(x, y)
-                        first_point = False
-                    else:
-                        path.lineTo(x, y)
-            if not first_point:
-                tags = way['tags']
-                color = self.tag_colors.get(next(iter(tags), ''), QColor("#ADD8E6"))  # Changed from Qt.black to light blue
+    #     self.map_to_scene = map_to_scene  # Assign to instance for reuse
+
+    #     for way in self.ways.values():
+    #         node_refs = way['nodes']
+    #         first_point = True
+    #         path = QPainterPath()
+    #         points = []
+    #         for node_id in node_refs:
+    #             if node_id in self.nodes:
+    #                 lat, lon = self.nodes[node_id]
+    #                 x, y = self.map_to_scene(lat, lon)
+    #                 points.append((x, y))
+    #                 if first_point:
+    #                     path.moveTo(x, y)
+    #                     first_point = False
+    #                 else:
+    #                     path.lineTo(x, y)
+    #         if not first_point:
+    #             tags = way['tags']
+    #             color = self.tag_colors.get(next(iter(tags), ''), QColor("#ADD8E6"))  # Changed from Qt.black to light blue
                 
-                # Check if the way is closed and has an enclosed tag
-                if any(tag in self.enclosed_tags for tag in tags) and node_refs[0] == node_refs[-1]:
-                    # Draw filled polygon for enclosed areas
-                    polygon = QPainterPath()
-                    polygon.moveTo(*points[0])
-                    for point in points[1:]:
-                        polygon.lineTo(*point)
-                    polygon.closeSubpath()
-                    polygonItem = QGraphicsPathItem(polygon)
-                    pen = QPen(color)
-                    pen.setWidthF(self.getPenWidth())
-                    polygonItem.setPen(pen)
-                    polygonItem.setBrush(QColor(color))
-                    self.scene.addItem(polygonItem)
-                    self.pathItems.append(polygonItem)
-                else:
-                    pen = QPen(color)
-                    pen.setWidthF(self.getPenWidth())
-                    pathItem = QGraphicsPathItem(path)
-                    pathItem.setPen(pen)
-                    self.scene.addItem(pathItem)
-                    self.pathItems.append(pathItem)
+    #             # Check if the way is closed and has an enclosed tag
+    #             if any(tag in self.enclosed_tags for tag in tags) and node_refs[0] == node_refs[-1]:
+    #                 # Draw filled polygon for enclosed areas
+    #                 polygon = QPainterPath()
+    #                 polygon.moveTo(*points[0])
+    #                 for point in points[1:]:
+    #                     polygon.lineTo(*point)
+    #                 polygon.closeSubpath()
+    #                 polygonItem = QGraphicsPathItem(polygon)
+    #                 pen = QPen(color)
+    #                 pen.setWidthF(self.getPenWidth())
+    #                 polygonItem.setPen(pen)
+    #                 polygonItem.setBrush(QColor(color))
+    #                 self.scene.addItem(polygonItem)
+    #                 self.pathItems.append(polygonItem)
+    #             else:
+    #                 pen = QPen(color)
+    #                 pen.setWidthF(self.getPenWidth())
+    #                 pathItem = QGraphicsPathItem(path)
+    #                 pathItem.setPen(pen)
+    #                 self.scene.addItem(pathItem)
+    #                 self.pathItems.append(pathItem)
 
-                # After drawing the way, check for 'name' tag
-                if 'name' in tags:
-                    name = tags['name']
-                    # Check if the name has already been displayed
-                    if name not in self.displayed_names:
-                        # Calculate the centroid of the points to position the label
-                        x_coords = [point[0] for point in points]
-                        y_coords = [point[1] for point in points]
-                        centroid_x = sum(x_coords) / len(x_coords)
-                        centroid_y = sum(y_coords) / len(y_coords)
+    #             # After drawing the way, check for 'name' tag
+    #             if 'name' in tags:
+    #                 name = tags['name']
+    #                 # Check if the name has already been displayed
+    #                 if name not in self.displayed_names and self.view.scaleFactor >= self.nameTagThreshold:
+    #                     # Calculate the centroid of the points to position the label
+    #                     x_coords = [point[0] for point in points]
+    #                     y_coords = [point[1] for point in points]
+    #                     centroid_x = sum(x_coords) / len(x_coords)
+    #                     centroid_y = sum(y_coords) / len(y_coords)
 
-                        # Create a QGraphicsTextItem to display the name
-                        text_item = QGraphicsTextItem(name)
-                        text_item.setDefaultTextColor(QColor("#768ef9"))  # Changed text color to #768ef9
-                        font = text_item.font()
-                        font.setFamily("Microsoft YaHei")  # Changed font to Microsoft YaHei for better aesthetics with Chinese characters
-                        font.setPointSizeF(self.getFontSize())  # Maintain dynamic font sizing
-                        text_item.setFont(font)
-                        text_item.setPos(centroid_x, centroid_y)
-                        text_item.setZValue(1)  # Ensure the text is on top
-                        text_item.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+    #                     # Create a QGraphicsTextItem to display the name
+    #                     text_item = QGraphicsTextItem(name)
+    #                     text_item.setDefaultTextColor(QColor("#768ef9"))  # Changed text color to #768ef9
+    #                     font = text_item.font()
+    #                     font.setFamily("Microsoft YaHei")  # Changed font to Microsoft YaHei for better aesthetics with Chinese characters
+    #                     font.setPointSizeF(self.getFontSize())  # Maintain dynamic font sizing
+    #                     text_item.setFont(font)
+    #                     text_item.setPos(centroid_x, centroid_y)
+    #                     text_item.setZValue(1)  # Ensure the text is on top
+    #                     text_item.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
                         
-                        # Set visibility based on current scaleFactor
-                        if self.view.scaleFactor >= self.nameTagThreshold:
-                            text_item.setVisible(True)
-                        else:
-                            text_item.setVisible(False)
+    #                     # Set visibility based on current scaleFactor
+    #                     if self.view.scaleFactor >= self.nameTagThreshold:
+    #                         text_item.setVisible(True)
+    #                     else:
+    #                         text_item.setVisible(False)
                         
-                        self.scene.addItem(text_item)
-                        self.textItems.append(text_item)          # Store reference for updates
-                        self.displayed_names.add(name)            # Add name to the set to prevent duplication
+    #                     self.scene.addItem(text_item)
+    #                     self.textItems.append(text_item)          # Store reference for updates
+    #                     self.displayed_names.add(name)            # Add name to the set to prevent duplication
 
     def getPenWidth(self):
         # Calculate pen width based on the current scale factor
@@ -604,12 +614,10 @@ class MapInterface(QWidget):
                     item.setPen(pen)
                 elif isinstance(item, QGraphicsTextItem):
                     font = item.font()
-                    font.setPointSizeF(self.getFontSize())
+                    font.setPointSize(self.FIXED_FONT_SIZE)  # Use the constant for the fixed font size
                     item.setFont(font)
         # Also update the icon scales
         self.updateIconScale()
-        # Update text item font sizes
-        self.updateTextItemFontSizes()
         # Update text item visibility based on zoom threshold
         self.updateTextItemVisibility()
 
@@ -620,8 +628,8 @@ class MapInterface(QWidget):
             text_item.setFont(font)
 
     def updateTextItemVisibility(self):
-        # print(self.view.scaleFactor)
         if self.view.scaleFactor >= self.nameTagThreshold:
+            # print('show', self.view.scaleFactor, self.nameTagThreshold)
             for text_item in self.textItems:
                 text_item.setVisible(True)
         else:
@@ -629,9 +637,8 @@ class MapInterface(QWidget):
                 text_item.setVisible(False)
 
     def getFontSize(self):
-        # Calculate font size based on current scale factor
-        base_font_size = 0.4  # Base font size at initial scaleFactor of 2.5
-        return base_font_size * (self.view.scaleFactor / 2.5)
+        # Return the fixed font size
+        return self.FIXED_FONT_SIZE
 
     def handleMapClick(self, scene_pos):
         nearest_node_id = self.find_nearest_node(scene_pos)
