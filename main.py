@@ -59,8 +59,11 @@ class Application(QApplication):
         # Emit the backendStarted signal via signalBus
         signalBus.backendStarted.emit()
 
-    def handle_send_backend_request(self, request):
-        self.backend_process.write(request.encode())  # Add this method
+    def handle_send_backend_request(self, request, pedestrian, riding, driving, pubTransport):
+        backend_command = f"{request} {int(pedestrian)} {int(riding)} {int(driving)} {int(pubTransport)}\n"
+        print(backend_command)
+        self.backend_process.write(backend_command.encode())
+        self.backend_process.waitForBytesWritten()  # Ensure the data is written
 
     def handle_backend_error_occurred(self, error):
         error_messages = {

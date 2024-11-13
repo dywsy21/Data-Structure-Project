@@ -17,6 +17,3 @@ set(TINYXML_SOURCES
 
 # Add executable with all source files
 add_executable(backend main.cpp path_finding.cpp ${TINYXML_SOURCES})
-
-# Link libraries if any (TinyXML is now part of the executable)
-# No need to link separately since we're compiling TinyXML directly

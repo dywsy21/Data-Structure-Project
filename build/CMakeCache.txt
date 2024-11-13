@@ -262,6 +262,15 @@ Project_SOURCE_DIR:STATIC=E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Stru
 //The directory containing a CMake configuration file for TinyXML.
 TinyXML_DIR:PATH=TinyXML_DIR-NOTFOUND
 
+//Value Computed by CMake
+backend_BINARY_DIR:STATIC=E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/build
+
+//Value Computed by CMake
+backend_IS_TOP_LEVEL:STATIC=ON
+
+//Value Computed by CMake
+backend_SOURCE_DIR:STATIC=E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/backend
+
 
 ########################
 # INTERNAL cache entries

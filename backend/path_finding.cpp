@@ -9,6 +9,7 @@
 #include <cmath>
 #include <map>
 #include <unordered_map>
+#include <fstream>
 
 // Use memory pools for Edge allocations
 class EdgeAllocator {
@@ -17,123 +18,173 @@ public:
     // ...code to manage memory allocations for Edge structs...
 };
 
+extern std::vector<uint64_t> index_to_node_id;
+
 // Function to load the graph from an XML file
-bool load_graph(const std::string& xml_file,
+bool load_graph(const std::string& filepath,
                 std::vector<std::vector<Edge>>& graph,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
                 std::vector<uint64_t>& index_to_node_id,
-                std::unordered_map<uint64_t, std::pair<double, double>>& node_coords_map) {
-    TiXmlDocument doc(xml_file.c_str());
+                std::unordered_map<uint64_t, std::pair<double, double>>& node_coords_map,
+                std::unordered_map<uint64_t, std::string>& node_tags,
+                bool pedestrian, bool riding, bool driving, bool pubTransport) {
+    TiXmlDocument doc(filepath.c_str());
     if (!doc.LoadFile()) {
-        std::cerr << "Failed to load XML file: " << xml_file << std::endl;
+        std::cerr << "Failed to load file: " << filepath << std::endl;
         return false;
     }
 
     TiXmlElement* root = doc.RootElement();
     if (!root) {
-        std::cerr << "Failed to get root element in XML file: " << xml_file << std::endl;
+        std::cerr << "Invalid XML format: No root element." << std::endl;
         return false;
     }
 
-    // First pass: Parse nodes and store their coordinates
-    for (TiXmlElement* element = root->FirstChildElement("node"); element != nullptr; element = element->NextSiblingElement("node")) {
-        const char* id_str = element->Attribute("id");
-        const char* lat = element->Attribute("lat");
-        const char* lon = element->Attribute("lon");
-        if (id_str && lat && lon) {
-            uint64_t node_id = std::stoull(id_str); // Convert node ID to uint64_t
-            double latitude = std::stod(lat);
-            double longitude = std::stod(lon);
-            // Assign index to each node ID
-            uint32_t index = static_cast<uint32_t>(node_id_to_index.size());
-            node_id_to_index[node_id] = index;
-            index_to_node_id.push_back(node_id);
-            node_coords_map[node_id] = {latitude, longitude};
-        }
-    }
+    // Iterate through XML elements
+    uint32_t index = 0;
+    for (TiXmlElement* elem = root->FirstChildElement(); elem != nullptr; elem = elem->NextSiblingElement()) {
+        if (std::string(elem->Value()) == "node") {
+            uint64_t id = std::stoull(elem->Attribute("id"));
+            double lat = std::stod(elem->Attribute("lat"));
+            double lon = std::stod(elem->Attribute("lon"));
+            node_id_to_index[id] = index;
+            index_to_node_id.push_back(id);
+            node_coords_map[id] = {lat, lon};
+            graph.emplace_back(); // Initialize adjacency list
+            ++index;
+        } else if (std::string(elem->Value()) == "way") {
+            // Parse way elements and populate graph accordingly
+            uint64_t way_id = std::stoull(elem->Attribute("id"));
+            std::vector<uint64_t> node_refs;
+            TiXmlElement* nd = elem->FirstChildElement("nd");
+            while (nd) {
+                uint64_t ref = std::stoull(nd->Attribute("ref"));
+                node_refs.push_back(ref);
+                nd = nd->NextSiblingElement("nd");
+            }
 
-    // Resize the graph
-    graph.resize(node_id_to_index.size());
+            // Add edges between consecutive nodes
+            for (size_t i = 0; i < node_refs.size() - 1; ++i) {
+                uint64_t from_id = node_refs[i];
+                uint64_t to_id = node_refs[i + 1];
+                if (node_id_to_index.find(from_id) != node_id_to_index.end() &&
+                    node_id_to_index.find(to_id) != node_id_to_index.end()) {
+                    uint32_t from_idx = node_id_to_index[from_id];
+                    uint32_t to_idx = node_id_to_index[to_id];
+                    // For simplicity, assume weight as Euclidean distance
+                    double lat1 = node_coords_map[from_id].first;
+                    double lon1 = node_coords_map[from_id].second;
+                    double lat2 = node_coords_map[to_id].first;
+                    double lon2 = node_coords_map[to_id].second;
+                    double distance = std::sqrt(std::pow(lat2 - lat1, 2) + std::pow(lon2 - lon1, 2));
+                    graph[from_idx].push_back(Edge{to_idx, distance});
+                    graph[to_idx].push_back(Edge{from_idx, distance}); // Assuming undirected graph
+                }
+            }
 
-    // Second pass: Parse ways and build the graph
-    for (TiXmlElement* way = root->FirstChildElement("way"); way != nullptr; way = way->NextSiblingElement("way")) {
-        std::vector<std::string> node_refs;
-        for (TiXmlElement* nd = way->FirstChildElement("nd"); nd != nullptr; nd = nd->NextSiblingElement("nd")) {
-            const char* ref = nd->Attribute("ref");
-            if (ref) {
-                node_refs.emplace_back(ref);
+            // Handle tags for ways
+            TiXmlElement* tag = elem->FirstChildElement("tag");
+            while (tag) {
+                std::string key = tag->Attribute("k");
+                std::string value = tag->Attribute("v");
+                if (key == "highway") {
+                    for (uint64_t node_id : node_refs) {
+                        node_tags[node_id] = value;
+                    }
+                }
+                tag = tag->NextSiblingElement("tag");
             }
         }
-
-        // Build edges using node indices
-        for (size_t i = 1; i < node_refs.size(); ++i) {
-            uint64_t id_u = std::stoull(node_refs[i - 1]);
-            uint64_t id_v = std::stoull(node_refs[i]);
-            uint32_t u = node_id_to_index[id_u];
-            uint32_t v = node_id_to_index[id_v];
-            float weight = 1.0f; // Use float for weight
-            graph[u].push_back({v, weight});
-            graph[v].push_back({u, weight}); // If the graph is undirected
-        }
+        // Handle other element types if necessary
     }
+
+    // Further processing if needed, such as filtering based on node_tags and whitelist flags
 
     return true;
 }
 
+// Helper function to determine if a node is allowed based on whitelist
+bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::string>& node_tags,
+                    bool pedestrian, bool riding, bool driving, bool pubTransport) {
+    auto it = node_tags.find(node_id);
+    if (it == node_tags.end()) return false;
+
+    const std::string& highway_type = it->second;
+
+    if (pedestrian && (highway_type == "pedestrian" || highway_type == "footway" ||
+                      highway_type == "steps" || highway_type == "path" ||
+                      highway_type == "living_street"))
+        return true;
+    if (riding && (highway_type == "cycleway" || highway_type == "path" ||
+                  highway_type == "track"))
+        return true;
+    if (driving && (highway_type == "motorway" || highway_type == "trunk" ||
+                   highway_type == "primary" || highway_type == "secondary" ||
+                   highway_type == "tertiary" || highway_type == "service" ||
+                   highway_type == "motorway_link" || highway_type == "trunk_link" ||
+                   highway_type == "primary_link" || highway_type == "secondary_link" ||
+                   highway_type == "residential"))
+        return true;
+    if (pubTransport && (highway_type == "bus_stop" || highway_type == "motorway_junction" ||
+                        highway_type == "traffic_signals" || highway_type == "crossing"))
+        return true;
+
+    return false;
+}
+
 // Function to find the shortest path using Dijkstra's algorithm
-std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph,
-                               uint32_t start_idx,
-                               uint32_t end_idx) {
-    std::vector<float> distances(graph.size(), std::numeric_limits<float>::infinity());
+std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph, uint32_t start, uint32_t end,
+                               const std::unordered_map<uint64_t, std::string>& node_tags,
+                               bool pedestrian, bool riding, bool driving, bool pubTransport) {
+    std::vector<double> distances(graph.size(), std::numeric_limits<double>::infinity());
     std::vector<uint32_t> previous(graph.size(), -1);
+    std::priority_queue<std::pair<double, uint32_t>,
+                        std::vector<std::pair<double, uint32_t>>,
+                        std::greater<std::pair<double, uint32_t>>> queue;
 
-    distances[start_idx] = 0.0f;
-
-    auto cmp = [&distances](uint32_t a, uint32_t b) {
-        return distances[a] > distances[b];
-    };
-    std::priority_queue<uint32_t, std::vector<uint32_t>, decltype(cmp)> queue(cmp);
-    queue.push(start_idx);
-
-    size_t total_nodes = graph.size();
-    size_t processed_nodes = 0;
-    int last_progress = 0;
+    distances[start] = 0.0;
+    queue.emplace(0.0, start);
 
     while (!queue.empty()) {
-        uint32_t current = queue.top();
+        auto [dist, current] = queue.top();
         queue.pop();
 
-        if (current == end_idx) break;
+        if (current == end) break;
+
+        if (dist > distances[current]) continue;
 
         for (const auto& edge : graph[current]) {
-            float alt = distances[current] + edge.weight;
-            if (alt < distances[edge.target]) {
-                distances[edge.target] = alt;
-                previous[edge.target] = current;
-                queue.push(edge.target);
+            uint32_t neighbor = edge.to;
+            double new_dist = dist + edge.weight;
+
+            // Get node_id from index_to_node_id
+            uint64_t neighbor_id = index_to_node_id[neighbor];
+
+            // std::cout << "Before check" << std::endl;
+            // Check whitelist
+            if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
+                continue;
+
+            if (new_dist < distances[neighbor]) {
+                distances[neighbor] = new_dist;
+                previous[neighbor] = current;
+                queue.emplace(new_dist, neighbor);
             }
         }
-
-        // processed_nodes++;
-        // int progress = static_cast<int>((processed_nodes * 100.0) / total_nodes);
-        // if (progress > last_progress) {
-        //     std::cout << progress << std::endl;
-        //     last_progress = progress;
-        // }
     }
 
     // Reconstruct path
     std::vector<uint32_t> path;
-    uint32_t u = end_idx;
-    if (previous[u] != -1 || u == start_idx) {
-        while (u != start_idx) {
-            path.push_back(u);
-            u = previous[u];
-        }
-        path.push_back(start_idx);
-        std::reverse(path.begin(), path.end());
-    }
+    if (distances[end] == std::numeric_limits<double>::infinity())
+        return path; // No path found
 
+    for (uint32_t at = end; at != start; at = previous[at]) {
+        path.push_back(at);
+        if (previous[at] == static_cast<uint32_t>(-1))
+            return std::vector<uint32_t>(); // No path found
+    }
+    path.push_back(start);
+    std::reverse(path.begin(), path.end());
     return path;
 }
 
@@ -141,7 +192,9 @@ std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph,
 std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
                              uint32_t start_idx,
                              uint32_t end_idx,
-                             const std::vector<std::pair<double, double>>& node_coords) {
+                             const std::vector<std::pair<double, double>>& node_coords,
+                             const std::unordered_map<uint64_t, std::string>& node_tags,
+                             bool pedestrian, bool riding, bool driving, bool pubTransport) {
     auto heuristic = [&node_coords](uint32_t a, uint32_t b) {
         // Implement a heuristic function here, for simplicity, we use 0 (equivalent to Dijkstra)
         return 0.0f;
@@ -201,14 +254,22 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
         }
 
         for (const auto& edge : graph[current_start]) {
-            if (closed_set_start.find(edge.target) != closed_set_start.end()) continue;
+            if (closed_set_start.find(edge.to) != closed_set_start.end()) continue;
 
             float tentative_g_score = g_score_start[current_start] + edge.weight;
-            if (tentative_g_score < g_score_start[edge.target]) {
-                came_from_start[edge.target] = current_start;
-                g_score_start[edge.target] = tentative_g_score;
-                f_score_start[edge.target] = g_score_start[edge.target] + heuristic(edge.target, end_idx);
-                open_set_start.push(edge.target);
+
+            // Get node_id from index_to_node_id
+            uint64_t neighbor_id = index_to_node_id[edge.to];
+
+            // Check whitelist
+            if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
+                continue;
+
+            if (tentative_g_score < g_score_start[edge.to]) {
+                came_from_start[edge.to] = current_start;
+                g_score_start[edge.to] = tentative_g_score;
+                f_score_start[edge.to] = g_score_start[edge.to] + heuristic(edge.to, end_idx);
+                open_set_start.push(edge.to);
             }
         }
 
@@ -238,14 +299,22 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
         }
 
         for (const auto& edge : graph[current_end]) {
-            if (closed_set_end.find(edge.target) != closed_set_end.end()) continue;
+            if (closed_set_end.find(edge.to) != closed_set_end.end()) continue;
 
             float tentative_g_score = g_score_end[current_end] + edge.weight;
-            if (tentative_g_score < g_score_end[edge.target]) {
-                came_from_end[edge.target] = current_end;
-                g_score_end[edge.target] = tentative_g_score;
-                f_score_end[edge.target] = g_score_end[edge.target] + heuristic(edge.target, start_idx);
-                open_set_end.push(edge.target);
+
+            // Get node_id from index_to_node_id
+            uint64_t neighbor_id = index_to_node_id[edge.to];
+
+            // Check whitelist
+            if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
+                continue;
+
+            if (tentative_g_score < g_score_end[edge.to]) {
+                came_from_end[edge.to] = current_end;
+                g_score_end[edge.to] = tentative_g_score;
+                f_score_end[edge.to] = g_score_end[edge.to] + heuristic(edge.to, start_idx);
+                open_set_end.push(edge.to);
             }
         }
     }
@@ -256,7 +325,9 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
 // Function to find the shortest path using Bellman-Ford algorithm
 std::vector<uint32_t> bellman_ford(const std::vector<std::vector<Edge>>& graph,
                                    uint32_t start_idx,
-                                   uint32_t end_idx) {
+                                   uint32_t end_idx,
+                                   const std::unordered_map<uint64_t, std::string>& node_tags,
+                                   bool pedestrian, bool riding, bool driving, bool pubTransport) {
     std::vector<float> distances(graph.size(), std::numeric_limits<float>::infinity());
     std::vector<uint32_t> previous(graph.size(), -1);
 
@@ -267,9 +338,15 @@ std::vector<uint32_t> bellman_ford(const std::vector<std::vector<Edge>>& graph,
     for (size_t i = 0; i < graph.size() - 1; ++i) {
         for (size_t u = 0; u < graph.size(); ++u) {
             for (const auto& edge : graph[u]) {
-                if (distances[u] + edge.weight < distances[edge.target]) {
-                    distances[edge.target] = distances[u] + edge.weight;
-                    previous[edge.target] = u;
+                // Get node_id from index_to_node_id
+                uint64_t neighbor_id = index_to_node_id[edge.to];
+
+                if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
+                    continue;
+
+                if (distances[u] + edge.weight < distances[edge.to]) {
+                    distances[edge.to] = distances[u] + edge.weight;
+                    previous[edge.to] = u;
                 }
             }
         }
@@ -298,15 +375,23 @@ std::vector<uint32_t> bellman_ford(const std::vector<std::vector<Edge>>& graph,
 // Function to find the shortest path using Floyd-Warshall algorithm
 std::vector<uint32_t> floyd_warshall(const std::vector<std::vector<Edge>>& graph,
                                      uint32_t start_idx,
-                                     uint32_t end_idx) {
+                                     uint32_t end_idx,
+                                     const std::unordered_map<uint64_t, std::string>& node_tags,
+                                     bool pedestrian, bool riding, bool driving, bool pubTransport) {
     std::vector<std::vector<float>> dist(graph.size(), std::vector<float>(graph.size(), std::numeric_limits<float>::infinity()));
     std::vector<std::vector<uint32_t>> next(graph.size(), std::vector<uint32_t>(graph.size(), -1));
 
     for (size_t u = 0; u < graph.size(); ++u) {
         dist[u][u] = 0.0f;
         for (const auto& edge : graph[u]) {
-            dist[u][edge.target] = edge.weight;
-            next[u][edge.target] = edge.target;
+            // Get node_id from index_to_node_id
+            uint64_t neighbor_id = index_to_node_id[edge.to];
+
+            if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
+                continue;
+
+            dist[u][edge.to] = edge.weight;
+            next[u][edge.to] = edge.to;
         }
     }
 

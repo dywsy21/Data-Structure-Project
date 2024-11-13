@@ -781,9 +781,9 @@ class MapInterface(QWidget):
         else:
             self.progressBar.setVisible(False)
 
-        # Send the search request to the backend via signalBus
-        request = f"{self.selectedAlgorithm} {node1_id} {node2_id}\n"
-        signalBus.sendBackendRequest.emit(request)
+        # Send the search request to the backend via SignalBus
+        request = f"{self.selectedAlgorithm} {node1_id} {node2_id}"
+        signalBus.sendBackendRequest.emit(request, self.pedestrain_enabled, self.riding_enabled, self.driving_enabled, self.pubTransport_enabled)
 
     def handle_backend_response(self, output):
         lines = output.strip().split('\n')
@@ -869,9 +869,9 @@ class MapInterface(QWidget):
 
     def display_path(self, path):
         # # Remove existing path items
-        # for path_item in self.drawnPaths:
-        #     self.scene.removeItem(path_item)
-        # self.drawnPaths.clear()
+        for path_item in self.drawnPaths:
+            self.scene.removeItem(path_item)
+        self.drawnPaths.clear()
         
         # Create a new path
         path_points = []
@@ -969,3 +969,4 @@ class MapInterface(QWidget):
         self.driving_enabled = self.drivingCheckBox.isChecked()
         self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()
         self.update_location_suggestions(self.get_all_available_names())
+        # Removed emission of sendWhitelistFlags

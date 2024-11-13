@@ -11,8 +11,9 @@ class SignalBus(QObject):
     backendOutputReceived = pyqtSignal(str)
     backendErrorReceived = pyqtSignal(str)
     backendStarted = pyqtSignal()
-    sendBackendRequest = pyqtSignal(str)  # Already added
+    sendBackendRequest = pyqtSignal(str, bool, bool, bool, bool)  # Update to include four flags
     graphLoaded = pyqtSignal()  # Add this line
     updateLocationSuggestions = pyqtSignal(list)
+    sendWhitelistFlags = pyqtSignal(bool, bool, bool, bool)  # Already present
 
 signalBus = SignalBus()
