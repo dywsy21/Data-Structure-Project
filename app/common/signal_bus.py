@@ -13,5 +13,6 @@ class SignalBus(QObject):
     backendStarted = pyqtSignal()
     sendBackendRequest = pyqtSignal(str)  # Already added
     graphLoaded = pyqtSignal()  # Add this line
+    updateLocationSuggestions = pyqtSignal(list)
 
 signalBus = SignalBus()

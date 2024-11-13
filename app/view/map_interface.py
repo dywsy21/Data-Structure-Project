@@ -1,5 +1,5 @@
 # coding: utf-8
-from PyQt5.QtCore import Qt, QProcess, QPoint
+from PyQt5.QtCore import Qt, QProcess, QPoint, QStringListModel
 from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor
 from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout, QAction
 from qfluentwidgets import * # type: ignore
@@ -99,6 +99,9 @@ class MapInterface(QWidget):
         self.pending_requests = {}
         self.request_id = 0
 
+        # Emit location suggestions initially
+        self.update_location_suggestions(self.get_all_available_names())
+
     def initUI(self):
         self.mainLayout = QVBoxLayout(self)
         
@@ -136,19 +139,22 @@ class MapInterface(QWidget):
         self.leftLayout.addWidget(self.startLineEdit)
         self.leftLayout.addWidget(self.endLineEdit)
 
-        # Add completer for auto-suggest
-        stands = [
-            "曲阳路"
-        ]
-        self.startCompleter = QCompleter(stands, self.startLineEdit)
+        self.startCompleterModel = QStringListModel()
+        self.startCompleter = QCompleter(self.startCompleterModel, self)
         self.startCompleter.setCaseSensitivity(Qt.CaseInsensitive)
         self.startCompleter.setMaxVisibleItems(10)
         self.startLineEdit.setCompleter(self.startCompleter)
 
-        self.endCompleter = QCompleter(stands, self.endLineEdit)
+        self.endCompleterModel = QStringListModel()
+        self.endCompleter = QCompleter(self.endCompleterModel, self)
         self.endCompleter.setCaseSensitivity(Qt.CaseInsensitive)
         self.endCompleter.setMaxVisibleItems(10)
         self.endLineEdit.setCompleter(self.endCompleter)
+
+        self.startLineEdit.searchButton.pressed.connect(self.on_start_line_edit_changed)
+        self.endLineEdit.searchButton.pressed.connect(self.on_end_line_edit_changed)
+        self.startLineEdit.returnPressed.connect(self.on_start_line_edit_changed)
+        self.endLineEdit.returnPressed.connect(self.on_end_line_edit_changed)
 
         # Middle Layout for CheckBoxes
         self.middleLayout = QGridLayout()
@@ -162,10 +168,10 @@ class MapInterface(QWidget):
         self.drivingCheckBox.setChecked(self.driving_enabled)
         self.pubTransportCheckBox.setChecked(self.pubTransport_enabled)
 
-        self.pedestrianCheckBox.stateChanged.connect(lambda state: setattr(self, 'pedestrain_enabled', state == Qt.Checked))
-        self.ridingCheckBox.stateChanged.connect(lambda state: setattr(self, 'riding_enabled', state == Qt.Checked))
-        self.drivingCheckBox.stateChanged.connect(lambda state: setattr(self, 'driving_enabled', state == Qt.Checked))
-        self.pubTransportCheckBox.stateChanged.connect(lambda state: setattr(self, 'pubTransport_enabled', state == Qt.Checked))
+        self.pedestrianCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.ridingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.drivingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.pubTransportCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
 
         self.middleLayout.addWidget(self.pedestrianCheckBox, 0, 0)
         self.middleLayout.addWidget(self.ridingCheckBox, 0, 1)
@@ -219,6 +225,9 @@ class MapInterface(QWidget):
             self.scene.removeItem(path)
         self.drawnPaths.clear()
         self.displayed_names.clear()  # Clear the set when resetting the map
+        # clear the line edits
+        self.startLineEdit.clear()
+        self.endLineEdit.clear()
             
     def get_whitelist(self):
         # Define mapping between modes and highway types
@@ -246,6 +255,7 @@ class MapInterface(QWidget):
             with open(output_file_path, 'r') as f:
                 valid_highways = {line.strip() for line in f if line.strip()}
         except FileNotFoundError:
+            signalBus.updateLocationSuggestions.emit(list(whitelist))
             return whitelist
 
         # Filter whitelist to include only valid highways
@@ -426,19 +436,37 @@ class MapInterface(QWidget):
     def handleMapClick(self, scene_pos):
         nearest_node_id = self.find_nearest_node(scene_pos)
         if nearest_node_id:
-            # Store up to two selected nodes
-            if len(self.selectedNodes) >= 2:
-                # Remove previous pins
-                for item in self.pinItems:
-                    self.scene.removeItem(item)
-                self.pinItems.clear()
-                self.selectedNodes.clear()
-                # Remove previously drawn path
-                for path in self.drawnPaths:
-                    self.scene.removeItem(path)
+            node_name = self.get_node_name(nearest_node_id)
+            if node_name:  # Ensure the node has a valid name
+                # Store up to two selected nodes
+                if len(self.selectedNodes) >= 2:
+                    # Remove previous pins
+                    for item in self.pinItems:
+                        self.scene.removeItem(item)
+                    self.pinItems.clear()
+                    self.selectedNodes.clear()
+                    # Remove previously drawn path
+                    for path in self.drawnPaths:
+                        self.scene.removeItem(path)
 
-            self.addPinAtNode(nearest_node_id)
-            self.selectedNodes.append(nearest_node_id)
+                self.addPinAtNode(nearest_node_id)
+                self.selectedNodes.append(nearest_node_id)
+                if len(self.selectedNodes) == 1:
+                    self.startLineEdit.setText(node_name)
+                elif len(self.selectedNodes) == 2:
+                    self.endLineEdit.setText(node_name)
+
+    def get_node_name(self, node_id):
+        way_id = self.node_to_way.get(node_id)
+        if way_id:
+            tags = self.ways[way_id]['tags']
+            name = tags.get('name')
+            if name:
+                return name
+            name_en = tags.get('name:en')
+            if name_en:
+                return name_en
+        return None
 
     def handleMapRightClick(self, scene_pos):
         # Find nearest node to right-click position
@@ -461,7 +489,7 @@ class MapInterface(QWidget):
         nearest_node_id = None
         for node_id, (lat, lon) in self.nodes.items():
             highway_type = self.get_highway_type_for_node(node_id)
-            if highway_type not in whitelist:
+            if highway_type not in whitelist or self.get_node_name(node_id) is None:
                 continue
 
             x, y = self.map_to_scene(lat, lon)
@@ -606,6 +634,7 @@ class MapInterface(QWidget):
     def _connectSignalToSlot(self):
         """ connect signal to slot """
         cfg.themeChanged.connect(setTheme)
+        signalBus.updateLocationSuggestions.connect(self.update_location_suggestions)
 
     def load_tag_colors(self):
         color_mapping = {}
@@ -617,3 +646,64 @@ class MapInterface(QWidget):
                         tag, color = line.strip().split(':')
                         color_mapping[tag] = QColor(color)
         return color_mapping
+
+    def on_start_line_edit_changed(self):
+        text = self.startLineEdit.text()
+        self.update_pin_from_line_edit(text, self.startLineEdit)
+
+    def on_end_line_edit_changed(self):
+        text = self.endLineEdit.text()
+        self.update_pin_from_line_edit(text, self.endLineEdit)
+
+    def update_pin_from_line_edit(self, text, line_edit):
+        nearest_node_id = self.find_nearest_node_by_name(text)
+        if nearest_node_id:
+            self.addPinAtNode(nearest_node_id)
+            node_name = self.get_node_name(nearest_node_id)
+            if line_edit == self.startLineEdit:
+                if len(self.selectedNodes) == 0:
+                    self.selectedNodes.append(nearest_node_id)
+                else:
+                    self.selectedNodes[0] = nearest_node_id
+                # self.startLineEdit.setText(node_name)
+            elif line_edit == self.endLineEdit:
+                if len(self.selectedNodes) < 2:
+                    self.selectedNodes.append(nearest_node_id)
+                else:
+                    self.selectedNodes[1] = nearest_node_id
+                # self.endLineEdit.setText(node_name)
+
+    def find_nearest_node_by_name(self, name):
+        for node_id, (lat, lon) in self.nodes.items():
+            way_id = self.node_to_way.get(node_id)
+            if way_id:
+                tags = self.ways[way_id]['tags']
+                if name == tags.get('name') or name == tags.get('name:en'):
+                    return node_id
+        return None
+
+    def update_location_suggestions(self, suggestions):
+        self.startCompleterModel.setStringList(suggestions)
+        self.endCompleterModel.setStringList(suggestions)
+        self.startCompleter = QCompleter(self.startCompleterModel, self)
+        self.endCompleter = QCompleter(self.endCompleterModel, self)
+        self.startLineEdit.setCompleter(self.startCompleter)  # Set the completer again
+        self.endLineEdit.setCompleter(self.endCompleter)      # Set the completer again
+
+    def get_all_available_names(self):
+        whitelist = self.get_whitelist()
+        # Get all names from the nodes
+        names = set()
+        for node_id in self.nodes:
+            if self.get_highway_type_for_node(node_id) in whitelist:
+                name = self.get_node_name(node_id)
+                if name:
+                    names.add(name)
+        return names
+
+    def on_checkbox_state_changed(self, state):
+        self.pedestrain_enabled = self.pedestrianCheckBox.isChecked()
+        self.riding_enabled = self.ridingCheckBox.isChecked()
+        self.driving_enabled = self.drivingCheckBox.isChecked()
+        self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()
+        self.update_location_suggestions(self.get_all_available_names())
