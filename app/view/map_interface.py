@@ -1,9 +1,9 @@
 # coding: utf-8
-from PyQt5.QtCore import Qt, QProcess, QPoint, QStringListModel
-from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor
-from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout, QAction
+from PyQt5.QtCore import Qt, QProcess, QPoint, QStringListModel, QRectF, QPointF
+from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor, QFont
+from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsRectItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout, QAction
 from qfluentwidgets import * # type: ignore
-import xml.etree.ElementTree as ET
+import lxml.etree as ET
 from ..common.config import cfg, isWin11
 from ..common.style_sheet import StyleSheet
 from ..common.icon import Icon
@@ -13,8 +13,9 @@ from ..common.signal_bus import signalBus
 
 
 class MapGraphicsView(QGraphicsView):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parent_interface, *args, **kwargs):
         super(MapGraphicsView, self).__init__(*args, **kwargs)
+        self.parent_interface = parent_interface
         self.setDragMode(QGraphicsView.NoDrag)
         self._pan = False
         self._panStartX = None
@@ -38,6 +39,8 @@ class MapGraphicsView(QGraphicsView):
 
             # Update line thickness and icon scales based on new scale factor
             self.parentWidget().updateLineThickness(self.scaleFactor) # type: ignore
+            # After zooming, redraw visible grids
+            self.parent_interface.draw_visible_grids()
         else:
             super(MapGraphicsView, self).wheelEvent(event)
 
@@ -95,7 +98,21 @@ class MapInterface(QWidget):
         self.grids = {}  # Dictionary to store grid data
         self.selectedAlgorithm = None  # Add this line
         self.algorithmWarningShown = False  # Add this line
+        self.grid_size = 0.01  # Define the size of each grid (in degrees)
+        self.grids = {}  # Dictionary to store nodes and ways by grid
+        self.visible_grids = set()  # Set to track currently visible grids
+        self.displayed_grids = set()  # Set to track grids currently drawn
+        self.grid_items = {}  # Dict to store items associated with each grid
         self.initUI()
+        # Increase the initial zoom level
+        initial_scale_factor = 15  # Increased from previous value
+        self.view.scale(initial_scale_factor, initial_scale_factor)
+        self.view.scaleFactor *= initial_scale_factor
+        # Center the view on a specific point
+        center_lat = (self.min_lat + self.max_lat) / 2  # Replace with desired latitude
+        center_lon = (self.min_lon + self.max_lon) / 2  # Replace with desired longitude
+        center_x, center_y = self.map_to_scene(center_lat, center_lon)
+        self.view.centerOn(center_x, center_y)
         signalBus.backendOutputReceived.connect(self.handle_backend_response)
         signalBus.backendErrorReceived.connect(self.handle_backend_error)
 
@@ -107,7 +124,7 @@ class MapInterface(QWidget):
         
         # Map View (75% height)
         self.scene = QGraphicsScene(self)
-        self.view = MapGraphicsView(self.scene, self)
+        self.view = MapGraphicsView(self, self.scene)
         self.view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.mainLayout.addWidget(self.view, 3)  # Stretch factor 3
 
@@ -209,6 +226,10 @@ class MapInterface(QWidget):
         # Add algorithms to the algorithmButton
         self.addAlgorithmsToButton()
 
+        # Connect signals for panning
+        self.view.horizontalScrollBar().valueChanged.connect(self.handleMapPan)
+        self.view.verticalScrollBar().valueChanged.connect(self.handleMapPan)
+
     def addAlgorithmsToButton(self):
         self.menu = RoundMenu(parent=self)
         algorithms = ["Dijkstra", "A*", "Bellman-Ford", "Floyd-Warshall"]
@@ -273,34 +294,194 @@ class MapInterface(QWidget):
         return whitelist
 
     def load_osm_data_and_draw_out(self, osm_file):
-        tree = ET.parse(osm_file)
-        root = tree.getroot()
+        context = ET.iterparse(osm_file, events=('start', 'end'))
+        context = iter(context)
+        event, root = next(context)
 
-        for node in root.findall('node'):
-            node_id = node.get('id')
-            lat = float(node.get('lat')) # type: ignore
-            lon = float(node.get('lon')) # type: ignore
-            self.nodes[node_id] = (lat, lon)
-
-        for way in root.findall('way'):
-            way_id = way.get('id')
-            node_refs = [nd.get('ref') for nd in way.findall('nd')]
-            tags = {tag.get('k'): tag.get('v') for tag in way.findall('tag')}
-            # Store way information in the dictionary using way_id as the key
-            self.ways[way_id] = {'nodes': node_refs, 'tags': tags}
-
-            # Update node_to_way mapping
-            for node_id in node_refs:
-                self.node_to_way[node_id] = way_id
-
-            # Initialize is_highway_node
-            if 'highway' in tags:
+        for event, elem in context:
+            if event == 'end' and elem.tag == 'node':
+                node_id = elem.get('id')
+                lat = float(elem.get('lat'))
+                lon = float(elem.get('lon'))
+                self.nodes[node_id] = (lat, lon)
+                root.clear()
+            elif event == 'end' and elem.tag == 'way':
+                way_id = elem.get('id')
+                node_refs = [nd.get('ref') for nd in elem.findall('nd')]
+                tags = {tag.get('k'): tag.get('v') for tag in elem.findall('tag')}
+                self.ways[way_id] = {'nodes': node_refs, 'tags': tags}
                 for node_id in node_refs:
-                    self.is_highway_node[node_id] = True
+                    self.node_to_way[node_id] = way_id
+                if 'highway' in tags:
+                    for node_id in node_refs:
+                        self.is_highway_node[node_id] = True
+                root.clear()
 
         # Clear the set before loading new data
         self.displayed_names.clear()
-        self.draw_map()
+        self.divide_into_grids()
+
+        # Compute bounding box of all nodes
+        lats = [lat for lat, lon in self.nodes.values()]
+        lons = [lon for lat, lon in self.nodes.values()]
+        self.min_lat, self.max_lat = min(lats), max(lats)
+        self.min_lon, self.max_lon = min(lons), max(lons)
+
+        # Set scene dimensions
+        self.scene_width = self.view.width()  # Use the current view width
+        self.scene_height = self.view.height()  # Use the current view height
+        self.scene.setSceneRect(0, 0, self.scene_width, self.scene_height)
+
+        # Define map_to_scene function
+        def map_to_scene(lat, lon):
+            x = (lon - self.min_lon) / (self.max_lon - self.min_lon) * self.scene_width
+            y = (lat - self.min_lat) / (self.max_lat - self.min_lat) * self.scene_height
+            y = self.scene_height - y  # Invert y-axis if necessary
+            return x, y
+
+        self.map_to_scene = map_to_scene  # Assign to instance for reuse
+        self.draw_visible_grids()
+
+    def divide_into_grids(self):
+        # Divide the nodes and ways into grids
+        for way_id, way in self.ways.items():
+            for node_id in way['nodes']:
+                if node_id in self.nodes:
+                    lat, lon = self.nodes[node_id]
+                    grid_key = self.get_grid_key(lat, lon)
+                    if grid_key not in self.grids:
+                        self.grids[grid_key] = {'nodes': set(), 'ways': set()}
+                    self.grids[grid_key]['nodes'].add(node_id)
+                    self.grids[grid_key]['ways'].add(way_id)
+
+    def get_grid_key(self, lat, lon):
+        # Correct the grid key calculation by swapping lat and lon
+        grid_x = int(lon / self.grid_size)
+        grid_y = int(lat / self.grid_size)
+        return (grid_x, grid_y)
+
+    def draw_visible_grids(self):
+        new_visible_grids = self.get_visible_grids()
+        grids_to_add = new_visible_grids - self.displayed_grids
+        grids_to_remove = self.displayed_grids - new_visible_grids
+
+        # Remove grids that are no longer visible
+        for grid_key in grids_to_remove:
+            if grid_key in self.grid_items:
+                for item in self.grid_items[grid_key]:
+                    self.scene.removeItem(item)
+                del self.grid_items[grid_key]
+
+        # Add new grids that have become visible
+        for grid_key in grids_to_add:
+            if grid_key in self.grids:
+                self.draw_grid(grid_key)
+
+        # Update the set of displayed grids
+        self.displayed_grids = new_visible_grids
+
+    def get_visible_grids(self):
+        # Get the bounding rectangle of the current view
+        rect = self.view.mapToScene(self.view.viewport().rect()).boundingRect()
+        # Convert scene coordinates back to latitude and longitude
+        top_left = self.scene_to_geo(rect.topLeft())
+        bottom_right = self.scene_to_geo(rect.bottomRight())
+        # Calculate grid keys within the visible area
+        min_grid_x = int(min(top_left[1], bottom_right[1]) / self.grid_size)
+        max_grid_x = int(max(top_left[1], bottom_right[1]) / self.grid_size)
+        min_grid_y = int(min(top_left[0], bottom_right[0]) / self.grid_size)
+        max_grid_y = int(max(top_left[0], bottom_right[0]) / self.grid_size)
+        visible_grids = set()
+        for x in range(min_grid_x, max_grid_x + 1):
+            for y in range(min_grid_y, max_grid_y + 1):
+                visible_grids.add((x, y))
+        return visible_grids
+
+    def scene_to_geo(self, point):
+        # Convert scene coordinates back to geographical coordinates
+        x_ratio = point.x() / self.scene_width
+        y_ratio = 1 - (point.y() / self.scene_height)
+        lat = self.min_lat + y_ratio * (self.max_lat - self.min_lat)
+        lon = self.min_lon + x_ratio * (self.max_lon - self.min_lon)
+        return lat, lon
+
+    def draw_grid(self, grid_key):
+        grid_data = self.grids[grid_key]
+        items = []
+        # Draw grid boundaries in light grey
+        grid_rect = self.get_grid_rect(grid_key)
+        pen = QPen(QColor("lightgrey"))
+        pen.setWidthF(0.5 / self.view.scaleFactor)
+        grid_boundary = QGraphicsRectItem(grid_rect)
+        grid_boundary.setPen(pen)
+        self.scene.addItem(grid_boundary)
+        items.append(grid_boundary)
+        # Draw ways and text items
+        for way_id in grid_data['ways']:
+            way = self.ways[way_id]
+            node_refs = way['nodes']
+            first_point = True
+            path = QPainterPath()
+            points = []
+            for node_id in node_refs:
+                if node_id in self.nodes:
+                    lat, lon = self.nodes[node_id]
+                    x, y = self.map_to_scene(lat, lon)
+                    points.append((x, y))
+                    if first_point:
+                        path.moveTo(x, y)
+                        first_point = False
+                    else:
+                        path.lineTo(x, y)
+            if not first_point:
+                tags = way['tags']
+                color = self.tag_colors.get(next(iter(tags), ''), QColor("#ADD8E6"))
+                pen = QPen(color)
+                pen.setWidthF(self.getPenWidth())
+                pathItem = QGraphicsPathItem(path)
+                pathItem.setPen(pen)
+                self.scene.addItem(pathItem)
+                items.append(pathItem)
+                # Handle text items within grid
+                if 'name' in tags and self.view.scaleFactor >= self.nameTagThreshold:
+                    name = tags['name']
+                    text_item = QGraphicsTextItem(name)
+                    font = QFont("Arial", int(self.getFontSize()))
+                    text_item.setFont(font)
+                    # Position the text at the midpoint of the path
+                    text_item.setPos(path.pointAtPercent(0.5))
+                    self.scene.addItem(text_item)
+                    items.append(text_item)
+        # Store the items associated with this grid
+        self.grid_items[grid_key] = items
+
+    def get_grid_rect(self, grid_key):
+        grid_x, grid_y = grid_key
+        top_left_lat = grid_y * self.grid_size
+        top_left_lon = grid_x * self.grid_size
+        bottom_right_lat = (grid_y + 1) * self.grid_size
+        bottom_right_lon = (grid_x + 1) * self.grid_size
+        x1, y1 = self.map_to_scene(top_left_lat, top_left_lon)
+        x2, y2 = self.map_to_scene(bottom_right_lat, bottom_right_lon)
+        return QRectF(QPointF(x1, y1), QPointF(x2, y2))
+
+    def clear_scene_items(self):
+        # Remove items from grids that are no longer displayed
+        for grid_key in self.displayed_grids:
+            if grid_key in self.grid_items:
+                for item in self.grid_items[grid_key]:
+                    self.scene.removeItem(item)
+        self.grid_items.clear()
+        self.displayed_grids.clear()
+
+    def resizeEvent(self, a0):
+        # Override resizeEvent to redraw visible grids on resize
+        super(MapInterface, self).resizeEvent(a0)
+        self.draw_visible_grids()
+
+    def handleMapPan(self):
+        # Call this method when the map is panned
+        self.draw_visible_grids()
 
     def draw_map(self):
         # Compute bounding box of all nodes
@@ -409,12 +590,22 @@ class MapInterface(QWidget):
         return pen_width
 
     def updateLineThickness(self, scaleFactor):
-        # Update pen widths of existing path items
+        # Update pen widths of existing items without redrawing
         pen_width = self.getPenWidth()
-        for item in self.pathItems:
-            pen = item.pen()
-            pen.setWidthF(pen_width)
-            item.setPen(pen)
+        for items in self.grid_items.values():
+            for item in items:
+                if isinstance(item, QGraphicsPathItem):
+                    pen = item.pen()
+                    pen.setWidthF(pen_width)
+                    item.setPen(pen)
+                elif isinstance(item, QGraphicsRectItem):
+                    pen = item.pen()
+                    pen.setWidthF(0.5 / self.view.scaleFactor)
+                    item.setPen(pen)
+                elif isinstance(item, QGraphicsTextItem):
+                    font = item.font()
+                    font.setPointSizeF(self.getFontSize())
+                    item.setFont(font)
         # Also update the icon scales
         self.updateIconScale()
         # Update text item font sizes

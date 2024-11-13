@@ -2,35 +2,36 @@
 #define PATH_FINDING_H
 
 #include <string>
-#include <unordered_map>
 #include <vector>
+#include <unordered_map>
+#include <cstdint> // Include for fixed-width integer types
 
-// Structure to represent an edge in the graph
 struct Edge {
-    std::string to;
-    double weight;
+    uint32_t target; // Use 32-bit unsigned int for node index
+    float weight;    // Use 32-bit float for weight
 };
 
-// Function to load the graph from an XML file
-bool load_graph(const std::string& filename, std::unordered_map<std::string, std::vector<Edge>>& graph);
-// Function to find the shortest path using Dijkstra's algorithm
-std::vector<std::string> dijkstra(const std::unordered_map<std::string, std::vector<Edge>>& graph,
-                                  const std::string& start,
-                                  const std::string& end);
+bool load_graph(const std::string& xml_file,
+                std::vector<std::vector<Edge>>& graph,
+                std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
+                std::vector<uint64_t>& index_to_node_id,
+                std::unordered_map<uint64_t, std::pair<double, double>>& node_coords_map);
 
-// Function to find the shortest path using A* algorithm
-std::vector<std::string> a_star(const std::unordered_map<std::string, std::vector<Edge>>& graph,
-                                const std::string& start,
-                                const std::string& end);
+std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph,
+                               uint32_t start_idx,
+                               uint32_t end_idx);
 
-// Function to find the shortest path using Bellman-Ford algorithm
-std::vector<std::string> bellman_ford(const std::unordered_map<std::string, std::vector<Edge>>& graph,
-                                      const std::string& start,
-                                      const std::string& end);
+std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
+                             uint32_t start_idx,
+                             uint32_t end_idx,
+                             const std::vector<std::pair<double, double>>& node_coords);
 
-// Function to find the shortest path using Floyd-Warshall algorithm
-std::vector<std::string> floyd_warshall(const std::unordered_map<std::string, std::vector<Edge>>& graph,
-                                        const std::string& start,
-                                        const std::string& end);
+std::vector<uint32_t> bellman_ford(const std::vector<std::vector<Edge>>& graph,
+                                   uint32_t start_idx,
+                                   uint32_t end_idx);
+
+std::vector<uint32_t> floyd_warshall(const std::vector<std::vector<Edge>>& graph,
+                                     uint32_t start_idx,
+                                     uint32_t end_idx);
 
 #endif // PATH_FINDING_H
