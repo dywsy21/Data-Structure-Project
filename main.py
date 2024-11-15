@@ -22,9 +22,6 @@ else:
 
 
 class Application(QApplication):
-    # Remove the backend_started signal
-    # backend_started = pyqtSignal()
-
     def __init__(self, argv):
         super().__init__(argv)
         self.backend_process = QProcess()

@@ -1,7 +1,7 @@
 # coding: utf-8
-from PyQt5.QtCore import Qt, QProcess, QPoint, QStringListModel, QRectF, QPointF
-from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor, QFont
-from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsRectItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout, QAction
+from PyQt5.QtCore import Qt, QProcess, QPoint, QStringListModel, QRectF, QPointF, QEvent, QThreadPool, QRunnable, pyqtSlot, pyqtSignal, QObject
+from PyQt5.QtGui import QMouseEvent, QPen, QPainterPath, QWheelEvent, QPixmap, QBrush, QColor, QFont, QImage
+from PyQt5.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QVBoxLayout, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsRectItem, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QGraphicsTextItem, QGraphicsItem, QCompleter, QGridLayout, QAction, QGraphicsItemGroup
 from qfluentwidgets import * # type: ignore
 import lxml.etree as ET
 from ..common.config import cfg, isWin11
@@ -10,6 +10,23 @@ from ..common.icon import Icon
 import os
 import subprocess
 from ..common.signal_bus import signalBus
+import requests
+import math
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import base64
+
+# initialize chrome driver
+options = Options()
+options.add_argument("--headless")
+options.add_argument("--disable-gpu")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 
 class MapGraphicsView(QGraphicsView):
@@ -77,6 +94,10 @@ class MapGraphicsView(QGraphicsView):
 
 class MapInterface(QWidget):
     FIXED_FONT_SIZE = 10  # Define a constant for the fixed font size
+
+    class TileSignals(QObject):
+        tile_loaded = pyqtSignal(QPixmap, float, float, tuple)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.tag_colors = self.load_tag_colors()
@@ -105,7 +126,13 @@ class MapInterface(QWidget):
         self.visible_grids = set()  # Set to track currently visible grids
         self.displayed_grids = set()  # Set to track grids currently drawn
         self.grid_items = {}  # Dict to store items associated with each grid
+        self.tile_cache = {}  # Cache to store tiles
+        self.satellite_group = QGraphicsItemGroup()  # Group to hold satellite tiles
+        self.thread_pool = QThreadPool()  # Initialize a thread pool
+        self.tile_signals = self.TileSignals()
+        self.tile_signals.tile_loaded.connect(self.add_tile_to_scene)
         self.initUI()
+        
         # Increase the initial zoom level
         initial_scale_factor = 15  # Increased from previous value
         self.view.scale(initial_scale_factor, initial_scale_factor)
@@ -120,6 +147,8 @@ class MapInterface(QWidget):
 
         # Emit location suggestions initially
         self.update_location_suggestions(self.get_all_available_names())
+
+
 
     def initUI(self):
         self.mainLayout = QVBoxLayout(self)
@@ -231,6 +260,10 @@ class MapInterface(QWidget):
         # Connect signals for panning
         self.view.horizontalScrollBar().valueChanged.connect(self.handleMapPan)
         self.view.verticalScrollBar().valueChanged.connect(self.handleMapPan)
+
+        # Initialize satellite layer
+        self.scene.addItem(self.satellite_group)
+        self.init_satellite_layer()
 
     def addAlgorithmsToButton(self):
         self.menu = RoundMenu(parent=self)
@@ -363,7 +396,8 @@ class MapInterface(QWidget):
         return (grid_x, grid_y)
 
     def draw_visible_grids(self):
-        new_visible_grids = self.get_visible_grids()
+        self.visible_grids = self.get_visible_grids()  # Calculate visible grids
+        new_visible_grids = self.visible_grids
         grids_to_add = new_visible_grids - self.displayed_grids
         grids_to_remove = self.displayed_grids - new_visible_grids
 
@@ -977,3 +1011,105 @@ class MapInterface(QWidget):
         self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()
         self.update_location_suggestions(self.get_all_available_names())
         # Removed emission of sendWhitelistFlags
+
+    def init_satellite_layer(self):
+        # Initialize satellite layer
+        self.scene.addItem(self.satellite_group)
+        # self.view.scaleFactorChanged.connect(self.draw_satellite_background)
+        self.view.horizontalScrollBar().valueChanged.connect(self.draw_satellite_background)
+        self.view.verticalScrollBar().valueChanged.connect(self.draw_satellite_background)
+        self.draw_satellite_background()
+
+    def draw_satellite_background(self):
+        # Clear existing tiles
+        for item in self.satellite_group.childItems():
+            self.satellite_group.removeFromGroup(item)
+            self.scene.removeItem(item)
+        # Get the bounding rectangle of the current view
+        rect = self.view.mapToScene(self.view.viewport().rect()).boundingRect()
+        # Convert scene coordinates to geographical coordinates
+        top_left_geo = self.scene_to_geo(rect.topLeft())
+        bottom_right_geo = self.scene_to_geo(rect.bottomRight())
+        # Define zoom level
+        zoom = int(self.view.scaleFactor)
+        zoom = max(1, min(zoom, 19))  # Ensure zoom level is within valid range
+        # Calculate tile ranges
+        x_tile_min, y_tile_min = self.lonlat_to_tile(top_left_geo[1], top_left_geo[0], zoom)
+        x_tile_max, y_tile_max = self.lonlat_to_tile(bottom_right_geo[1], bottom_right_geo[0], zoom)
+        # Loop through tile range and request tiles asynchronously
+        
+        for x_tile in range(x_tile_min, x_tile_max + 1):
+            for y_tile in range(y_tile_min, y_tile_max + 1):
+                grid_key = self.get_grid_key(*self.tile_to_lonlat(x_tile, y_tile, zoom))
+                
+                if True:
+                # if grid_key in self.visible_grids:
+                    runnable = TileRequestRunnable(x_tile, y_tile, zoom, self, grid_key)
+                    self.thread_pool.start(runnable)
+                else:
+                    print(f"Skipping tile: {zoom}/{x_tile}/{y_tile}")
+
+    def add_tile_to_scene(self, pixmap, x_pos, y_pos, grid_key):
+        # Add the loaded tile pixmap to the scene within its corresponding grid
+        if grid_key in self.visible_grids:
+            item = QGraphicsPixmapItem(pixmap)
+            item.setOffset(-256 / 2, -256 / 2)
+            item.setPos(x_pos, y_pos)
+            self.satellite_group.addToGroup(item)
+            if grid_key not in self.grid_items:
+                self.grid_items[grid_key] = []
+            self.grid_items[grid_key].append(item)
+
+    def lonlat_to_tile(self, lon, lat, zoom):
+        # Corrected lonlat_to_tile method
+        lat_rad = math.radians(lat)
+        n = 2 ** zoom
+        x_tile = int((lon + 180.0) / 360.0 * n)
+        y_tile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
+        return x_tile, y_tile
+
+    def tile_to_lonlat(self, x_tile, y_tile, zoom):
+        # Corrected tile_to_lonlat method
+        n = 2 ** zoom
+        lon = x_tile / n * 360.0 - 180.0
+        lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * y_tile / n)))
+        lat = math.degrees(lat_rad)
+        return lon, lat
+
+
+class TileRequestRunnable(QRunnable):
+    def __init__(self, x_tile, y_tile, zoom, parent, grid_key):
+        super().__init__()
+        self.x_tile = x_tile
+        self.y_tile = y_tile
+        self.zoom = zoom
+        self.parent = parent
+        self.grid_key = grid_key
+
+    @pyqtSlot()
+    def run(self):
+        print(f"Requesting tile: https://tile.openstreetmap.org/{self.zoom}/{self.x_tile}/{self.y_tile}.png")
+
+        # Corrected run method to use OpenStreetMap tiles
+        img_bytes = None
+        url = f"https://tile.openstreetmap.org/{self.zoom}/{self.x_tile}/{self.y_tile}.png"
+        try:
+            driver.get(url)
+            
+            # Get the image as base64
+            img_element = driver.find_element(By.TAG_NAME, 'img')
+            img_base64 = img_element.screenshot_as_base64
+            
+            # Convert base64 to bytes
+            img_bytes = base64.b64decode(img_base64)
+        except:
+            pass
+        
+        image = QImage.fromData(img_bytes) if img_bytes else None
+        
+        if image and not image.isNull():
+            pixmap = QPixmap.fromImage(image)
+            lon, lat = self.parent.tile_to_lonlat(self.x_tile, self.y_tile, self.zoom)
+            x_pos, y_pos = self.parent.map_to_scene(lat, lon)
+            self.parent.tile_signals.tile_loaded.emit(pixmap, x_pos, y_pos, self.grid_key)
+            print(f"Loaded tile: https://tile.openstreetmap.org/{self.zoom}/{self.x_tile}/{self.y_tile}.png")

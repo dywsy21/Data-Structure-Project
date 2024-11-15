@@ -19,3 +19,9 @@
 <!-- 16. time the path finding process -->
 17. make the reset button able to stop calculation process
 <!-- 18. refine name display -->
+
+
+19. 数据库
+20. leaflet
+21. 控制单位面积点的数量以渲染（经纬度小数点后只保留几位，合并起来）
+22. import geojson

@@ -5,3 +5,6 @@ build/*
 __pycache__
 .vscode/*
 .vscode
+backend/data/*
+map*
+map_large

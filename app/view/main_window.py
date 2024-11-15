@@ -3,7 +3,7 @@ from PyQt5.QtCore import QUrl, QSize, Qt, QProcess  # Ensure Qt is imported
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QApplication
 
-from qfluentwidgets import *
+from qfluentwidgets import * # type: ignore
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import InfoBar, InfoBarPosition  # Ensure InfoBar imports are present
 
