@@ -20,7 +20,6 @@ class MapInterface(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("mapInterface")
-        self.enclosed_tags = {'building', 'park', 'garden', 'leisure', 'landuse', 'natural', 'historic'}
         self.pedestrain_enabled = True
         self.riding_enabled = True
         self.driving_enabled = True
@@ -32,6 +31,7 @@ class MapInterface(QWidget):
         self.on_checkbox_state_changed = pyqtBoundSignal()
         self.thread_pool = QThreadPool()
         signalBus.finishRenderingTile.connect(self.on_tiles_fetched)
+        self.middlePoints = []  # Add this line
         
         self.initUI()
 
@@ -46,6 +46,7 @@ class MapInterface(QWidget):
         self.channel = QWebChannel()
         self.channel.registerObject('pyObj', self)
         self.browser.page().setWebChannel(self.channel)
+        self.browser.page().javaScriptConsoleMessage = self.handleConsoleMessage  # Add this line
         
         # Load the generated HTML file
         self.browser.setUrl(QUrl(f"file:///{os.path.abspath(map_html_path).replace(os.sep, '/')}"))
@@ -158,19 +159,22 @@ class MapInterface(QWidget):
         self.selectedAlgorithm = algorithm
         self.algorithmButton.setText(f"Algorithm: {algorithm}")
 
+    def handleConsoleMessage(self, level, message, lineNumber, sourceID):
+        print(f"JS Console: {message} (Source: {sourceID}, Line: {lineNumber})")
+
     @pyqtSlot()
     def on_load_finished(self):
         # Initialize JavaScript code to access the Folium map
         self.browser.page().runJavaScript(f"""
             // Access the existing Folium map
             var map = window.{map_html.get_name()};
-            
+
             // Ensure the map container has the correct ID
             document.getElementById('map').appendChild(map.getContainer());
-            
+
             // Initialize markers array
             var markers = [];
-            
+
             // Define custom signal class
             function Signal() {{
                 this.listeners = [];
@@ -183,7 +187,7 @@ class MapInterface(QWidget):
                     listener(data);
                 }});
             }};
-            
+
             // Define mapProperties object
             var mapProperties = {{
                 bounds: null,
@@ -191,12 +195,12 @@ class MapInterface(QWidget):
                 boundsChanged: new Signal(),
                 zoomChanged: new Signal()
             }};
-            
+
             // Connect to the PyQt WebChannel
             new QWebChannel(qt.webChannelTransport, function(channel) {{
                 window.pyObj = channel.objects.pyObj;
                 window.mapProperties = mapProperties;
-                
+
                 // Listen for property changes
                 mapProperties.boundsChanged.connect(function(bounds) {{
                     pyObj.updateVisibleTiles(bounds, mapProperties.zoom);
@@ -205,7 +209,7 @@ class MapInterface(QWidget):
                     pyObj.updateVisibleTiles(mapProperties.bounds, zoom);
                 }});
             }});
-            
+
             // Listen for moveend events
             map.on('moveend', function() {{
                 var bounds = map.getBounds();
@@ -215,8 +219,36 @@ class MapInterface(QWidget):
                 mapProperties.boundsChanged.emit(mapProperties.bounds);
                 mapProperties.zoomChanged.emit(mapProperties.zoom);
             }});
+
+            // Define custom icons
+            var yellowIcon = L.icon({{
+                iconUrl: 'file:///E:/BaiduSyncdisk/Code%20Projects/PyQt%20Projects/Data%20Structure%20Project/app/resource/images/yellow_icon.svg',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+            }});
+
+            console.log("Yellow icon created:", yellowIcon);
+
+            // Listen for click events
+            map.on('click', function(e) {{
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
+                var isCtrlPressed = e.originalEvent.ctrlKey;
+                if (isCtrlPressed) {{
+                    // Add yellow pin for middle points
+                    var marker = L.marker([lat, lng], {{icon: yellowIcon}}).addTo(map);
+                    console.log("Added yellow marker at:", lat, lng);
+                    window.pyObj.addMiddlePoint(lat, lng);
+                }} else {{
+                    // Add default pin for selected nodes
+                    var marker = L.marker([lat, lng]).addTo(map);
+                    console.log("Added default marker at:", lat, lng);
+                    window.pyObj.addSelectedNode(lat, lng);
+                }}
+            }});
         """)
-    
+
     @pyqtSlot(str, int)
     def updateVisibleTiles(self, bounds_json, zoom):
         bounds = json.loads(bounds_json)
@@ -241,3 +273,11 @@ class MapInterface(QWidget):
         """
 
         self.browser.page().runJavaScript(custom_tile_layer_js)
+
+    @pyqtSlot(float, float)
+    def addSelectedNode(self, lat, lng):
+        self.selectedNodes.append((lat, lng))
+
+    @pyqtSlot(float, float)
+    def addMiddlePoint(self, lat, lng):
+        self.middlePoints.append((lat, lng))
