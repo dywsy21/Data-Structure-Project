@@ -5,11 +5,25 @@ import sys
 from PyQt5.QtCore import Qt, QTranslator, QProcess, pyqtSignal, QDir
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication, QCompleter
-from qfluentwidgets import FluentTranslator, InfoBar, InfoBarPosition  # Ensure InfoBar imports are present
+from qfluentwidgets import FluentTranslator, InfoBar, InfoBarPosition
 
-from app.common.config import cfg
+from app.common.config import *
 from app.view.main_window import MainWindow
 from app.common.signal_bus import signalBus
+
+# preprocess osm data
+if not os.path.exists(db_path):
+    print("Preprocessing OSM data...")
+    from preprocess_osm import preprocess_osm_data
+    preprocess_osm_data(map_relative_path, db_path)
+    print("Preprocessing OSM data completed.")
+
+# # prepare map
+# if not os.path.exists(map_html_path):
+#     print("Preparing map...")
+#     from preprocess_map_html import prepare_map
+#     prepare_map()
+#     print("Map preparation completed.")
 
 # enable dpi scale
 if cfg.get(cfg.dpiScale) != "Auto":
@@ -26,7 +40,7 @@ class Application(QApplication):
         super().__init__(argv)
         self.backend_process = QProcess()
         # Specify the absolute path to backend.exe or ensure it's in the current working directory
-        backend_path = r"E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\backend.exe"
+        backend_path = r"build\backend.exe"
         self.backend_process.setProgram(backend_path)
         
         # # Optionally, set the working directory
@@ -41,6 +55,16 @@ class Application(QApplication):
 
         # Connect the sendBackendRequest signal to the handler
         signalBus.sendBackendRequest.connect(self.handle_send_backend_request)
+
+        # self.renderer_process = QProcess()
+        # renderer_path = r"build\renderer.exe"
+        # self.renderer_process.setProgram(renderer_path)
+        # self.renderer_process.setArguments([])
+        # self.renderer_process.readyReadStandardOutput.connect(self.handle_renderer_output)
+        # self.renderer_process.readyReadStandardError.connect(self.handle_renderer_error)
+        # self.renderer_process.started.connect(self.on_renderer_started)
+        # self.renderer_process.errorOccurred.connect(self.handle_renderer_error_occurred)
+        # self.renderer_process.start()
         
     def handle_backend_output(self):
         output = self.backend_process.readAllStandardOutput().data().decode()

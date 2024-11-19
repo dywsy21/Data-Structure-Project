@@ -15,5 +15,7 @@ class SignalBus(QObject):
     graphLoaded = pyqtSignal()  # Add this line
     updateLocationSuggestions = pyqtSignal(list)
     sendWhitelistFlags = pyqtSignal(bool, bool, bool, bool)  # Already present
+    renderTile = pyqtSignal(int, int, int) # z, x, y
+    finishRenderingTile = pyqtSignal(int, int, int)  # z, x, y
 
 signalBus = SignalBus()

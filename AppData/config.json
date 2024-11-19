@@ -3,9 +3,9 @@
         "CheckUpdateAtStartUp": true
     },
     "MainWindow": {
-        "DpiScale": 1.75,
+        "DpiScale": 1.5,
         "Language": "Auto",
-        "MicaEnabled": true
+        "MicaEnabled": false
     },
     "QFluentWidgets": {
         "ThemeColor": "#ff009faa",

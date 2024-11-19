@@ -71,6 +71,26 @@
         "string_view": "cpp",
         "unordered_set": "cpp",
         "chrono": "cpp",
-        "ratio": "cpp"
+        "ratio": "cpp",
+        "qimage": "cpp",
+        "qpainter": "cpp",
+        "qgraphicstextitem": "cpp",
+        "qgraphicsscene": "cpp",
+        "qgraphicspathitem": "cpp",
+        "charconv": "cpp",
+        "condition_variable": "cpp",
+        "format": "cpp",
+        "forward_list": "cpp",
+        "functional": "cpp",
+        "future": "cpp",
+        "locale": "cpp",
+        "mutex": "cpp",
+        "numeric": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp",
+        "variant": "cpp",
+        "xlocbuf": "cpp",
+        "xlocmes": "cpp",
+        "qfont": "cpp"
     }
 }

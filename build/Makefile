@@ -128,6 +128,19 @@ backend/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/build
 .PHONY : backend/fast
 
+#=============================================================================
+# Target rules for targets named renderer
+
+# Build rule for target.
+renderer: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 renderer
+.PHONY : renderer
+
+# fast build rule for target.
+renderer/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\renderer.dir\build.make CMakeFiles/renderer.dir/build
+.PHONY : renderer/fast
+
 main.obj: main.cpp.obj
 .PHONY : main.obj
 
@@ -175,6 +188,30 @@ path_finding.s: path_finding.cpp.s
 path_finding.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/path_finding.cpp.s
 .PHONY : path_finding.cpp.s
+
+renderer.obj: renderer.cpp.obj
+.PHONY : renderer.obj
+
+# target to build an object file
+renderer.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\renderer.dir\build.make CMakeFiles/renderer.dir/renderer.cpp.obj
+.PHONY : renderer.cpp.obj
+
+renderer.i: renderer.cpp.i
+.PHONY : renderer.i
+
+# target to preprocess a source file
+renderer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\renderer.dir\build.make CMakeFiles/renderer.dir/renderer.cpp.i
+.PHONY : renderer.cpp.i
+
+renderer.s: renderer.cpp.s
+.PHONY : renderer.s
+
+# target to generate assembly for a file
+renderer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\renderer.dir\build.make CMakeFiles/renderer.dir/renderer.cpp.s
+.PHONY : renderer.cpp.s
 
 tinyxml/tinystr.obj: tinyxml/tinystr.cpp.obj
 .PHONY : tinyxml/tinystr.obj
@@ -281,12 +318,16 @@ help:
 	@echo ... edit_cache
 	@echo ... rebuild_cache
 	@echo ... backend
+	@echo ... renderer
 	@echo ... main.obj
 	@echo ... main.i
 	@echo ... main.s
 	@echo ... path_finding.obj
 	@echo ... path_finding.i
 	@echo ... path_finding.s
+	@echo ... renderer.obj
+	@echo ... renderer.i
+	@echo ... renderer.s
 	@echo ... tinyxml/tinystr.obj
 	@echo ... tinyxml/tinystr.i
 	@echo ... tinyxml/tinystr.s
