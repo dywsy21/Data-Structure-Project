@@ -243,6 +243,13 @@ class MapInterface(QWidget):
                     console.log("Added yellow marker at:", lat, lng);
                     window.pyObj.addMiddlePoint(lat, lng);
                 }} else {{
+                    if (markers.length >= 2) {{
+                        markers.forEach(function(marker) {{
+                            map.removeLayer(marker);
+                        }});
+                        markers = [];
+                        window.pyObj.clearSelectedNodes();
+                    }}
                     // Add default pin for selected nodes
                     var marker = L.marker([lat, lng]).addTo(map);
                     markers.push(marker);
@@ -277,6 +284,11 @@ class MapInterface(QWidget):
                 }}
             }});
         """)
+
+    @pyqtSlot()
+    def clearSelectedNodes(self):
+        self.selectedNodes.clear()
+        print("Cleared all selected nodes")
 
     @pyqtSlot(str, int)
     def updateVisibleTiles(self, bounds_json, zoom):
