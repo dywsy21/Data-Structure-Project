@@ -1,7 +1,9 @@
 # coding: utf-8
+from multiprocessing import process
 from PyQt5.QtCore import * # type: ignore
 from PyQt5.QtGui import * # type: ignore
 from PyQt5.QtWidgets import * # type: ignore
+from numpy import signbit
 from qfluentwidgets import * # type: ignore
 from PyQt5.QtWebEngineWidgets import * # type: ignore
 from PyQt5.QtWebChannel import * # type: ignore
@@ -33,6 +35,7 @@ class MapInterface(QWidget):
         signalBus.finishRenderingTile.connect(self.on_tiles_fetched)
         self.middlePoints = []  # Add this line
         self.max_distance = 0.01  # Max distance limit for removing nodes
+        self.custom_tile_layer_ids = []  # Store layer IDs instead of layer objects
         
         self.initUI()
 
@@ -147,6 +150,9 @@ class MapInterface(QWidget):
         # Add algorithms to the algorithmButton
         self.addAlgorithmsToButton()
 
+        # Add a button to control the base map layer visibility
+        self.addBaseLayerControlButton()
+
     def addAlgorithmsToButton(self):
             self.menu = RoundMenu(parent=self)
             algorithms = ["Dijkstra", "A*", "Bellman-Ford", "Floyd-Warshall"]
@@ -160,12 +166,59 @@ class MapInterface(QWidget):
         self.selectedAlgorithm = algorithm
         self.algorithmButton.setText(f"Algorithm: {algorithm}")
 
+    @pyqtSlot(int, str, int, str)
     def handleConsoleMessage(self, level, message, lineNumber, sourceID):
-        print(f"JS Console: {message} (Source: {sourceID}, Line: {lineNumber})")
+        level_str = {
+            0: "DEBUG",
+            1: "INFO",
+            2: "WARNING",
+            3: "ERROR"
+        }.get(level, "UNKNOWN")
+        
+        print(f"[JS {level_str}] {message}")
+        if sourceID or lineNumber:
+            print(f"Source: {sourceID}, Line: {lineNumber}")
 
     @pyqtSlot()
     def on_load_finished(self):
         # Initialize JavaScript code to access the Folium map
+        self.browser.page().runJavaScript("""
+            // Redirect console messages to Python
+            var originalConsole = window.console;
+            window.console = {
+                log: function() {
+                    try {
+                        var args = Array.prototype.slice.call(arguments);
+                        var message = args.map(String).join(' ');
+                        window.pyObj.handleConsoleMessage(1, message, 0, '');
+                        originalConsole.log.apply(originalConsole, args);
+                    } catch(e) {
+                        originalConsole.error('Error in console.log override:', e);
+                    }
+                },
+                warn: function() {
+                    try {
+                        var args = Array.prototype.slice.call(arguments);
+                        var message = args.map(String).join(' ');
+                        window.pyObj.handleConsoleMessage(2, message, 0, '');
+                        originalConsole.warn.apply(originalConsole, args);
+                    } catch(e) {
+                        originalConsole.error('Error in console.warn override:', e);
+                    }
+                },
+                error: function() {
+                    try {
+                        var args = Array.prototype.slice.call(arguments);
+                        var message = args.map(String).join(' ');
+                        window.pyObj.handleConsoleMessage(3, message, 0, '');
+                        originalConsole.error.apply(originalConsole, args);
+                    } catch(e) {
+                        originalConsole.error('Error in console.error override:', e);
+                    }
+                }
+            };
+        """)
+        
         self.browser.page().runJavaScript(f"""
             // Access the existing Folium map
             var map = window.{map_html.get_name()};
@@ -204,21 +257,40 @@ class MapInterface(QWidget):
 
                 // Listen for property changes
                 mapProperties.boundsChanged.connect(function(bounds) {{
-                    pyObj.updateVisibleTiles(bounds, mapProperties.zoom);
+                    pyObj.updateVisibleTiles(JSON.stringify(bounds), mapProperties.zoom);
                 }});
                 mapProperties.zoomChanged.connect(function(zoom) {{
-                    pyObj.updateVisibleTiles(mapProperties.bounds, zoom);
+                    pyObj.updateVisibleTiles(JSON.stringify(mapProperties.bounds), zoom);
                 }});
             }});
 
             // Listen for moveend events
             map.on('moveend', function() {{
-                var bounds = map.getBounds();
-                var zoom = map.getZoom();
-                mapProperties.bounds = JSON.stringify(bounds);
-                mapProperties.zoom = zoom;
-                mapProperties.boundsChanged.emit(mapProperties.bounds);
-                mapProperties.zoomChanged.emit(mapProperties.zoom);
+                try {{
+                    var bounds = map.getBounds();
+                    // Extract only the necessary data from bounds
+                    var boundsData = {{
+                        _southWest: {{
+                            lat: bounds.getSouth(),
+                            lng: bounds.getWest()
+                        }},
+                        _northEast: {{
+                            lat: bounds.getNorth(),
+                            lng: bounds.getEast()
+                        }}
+                    }};
+                    var zoom = map.getZoom();
+                    
+                    // Store values separately to avoid circular references
+                    mapProperties.bounds = boundsData;
+                    mapProperties.zoom = zoom;
+                    
+                    // Emit events with simple data
+                    mapProperties.boundsChanged.emit(boundsData);
+                    mapProperties.zoomChanged.emit(zoom);
+                }} catch(e) {{
+                    console.error('Error in moveend handler:', e);
+                }}
             }});
 
             // Define custom icons
@@ -230,6 +302,9 @@ class MapInterface(QWidget):
             }});
 
             console.log("Yellow icon created:", yellowIcon);
+
+            // Initialize custom tile layer group
+            window.customTileLayerGroup = L.layerGroup().addTo(map);
 
             // Listen for click events
             map.on('click', function(e) {{
@@ -302,18 +377,74 @@ class MapInterface(QWidget):
         # Start a worker for each tile to fetch nodes from the database
         for tile in visible_tiles:
             print(zoom, tile[0], tile[1])
-            signalBus.renderTile.emit(zoom, tile[0], tile[1])
+            self.begin_rendering_tile(zoom, tile[0], tile[1])
+    
+    def begin_rendering_tile(self, z, x, y):
+        # Render the tile using renderer.exe
+        def render_tile(z, x, y):
+            process = subprocess.Popen(
+                ["renderer/target/release/renderer.exe"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            input_data = f"{z} {x} {y}\n".encode()
+            stdout, stderr = process.communicate(input=input_data)
+            process.wait()
+            if process.returncode != 0:
+                print(f"Error rendering tile {z}/{x}/{y}: {stderr.decode()}")
+            else:
+                print(f"Successfully rendered tile {z}/{x}/{y}")
+            signalBus.finishRenderingTile.emit(z, x, y)
+
+        render_tile(z, x, y)
+        
 
     def on_tiles_fetched(self, z, x, y):
-        custom_tile_layer_js = """
+        tile_path = f"renderer/cache/{z}/{x}_{y}.png"
+        assert os.path.exists(tile_path), f"Tile image does not exist at {tile_path}"
+        
+        custom_tile_layer_js = f"""
+            console.log("Adding custom tile layer for {z}/{x}/{y}");
+            var layerId = 'tile_{z}_{x}_{y}';
             var custom_tile_layer = L.tileLayer(
-                "renderer/cache/{z}/{x}/{y}.png",
-                {{"attribution": "Custom Tiles", "maxZoom": 19}}
+                "renderer/cache/{{z}}/{{x}}_{{y}}.png",
+                {{
+                    id: layerId,
+                    attribution: "Custom Tiles",
+                    maxZoom: 20,
+                    tileSize: 256,
+                    bounds: L.latLngBounds(
+                        map.unproject([{x} * 256, ({y} + 1) * 256], {z}),
+                        map.unproject([{(x + 1) * 256}, {y} * 256], {z})
+                    )
+                }}
             );
-            custom_tile_layer.addTo(map);
+            window.customTileLayerGroup.addLayer(custom_tile_layer);
+            console.log("Custom tile layer added with ID:", layerId);
+            window.pyObj.addCustomTileLayerId(layerId);
         """
-
         self.browser.page().runJavaScript(custom_tile_layer_js)
+
+    @pyqtSlot(str)
+    def addCustomTileLayerId(self, layer_id):
+        self.custom_tile_layer_ids.append(layer_id)
+
+    def closeEvent(self, event):
+        # Remove all custom tile layers by ID
+        if self.custom_tile_layer_ids:
+            js_code = """
+                var layerIds = %s;
+                layerIds.forEach(function(layerId) {
+                    map.eachLayer(function(layer) {
+                        if(layer.options && layer.options.id === layerId) {
+                            map.removeLayer(layer);
+                        }
+                    });
+                });
+            """ % json.dumps(self.custom_tile_layer_ids)
+            self.browser.page().runJavaScript(js_code)
+        super().closeEvent(event)
 
     @pyqtSlot(float, float)
     def addSelectedNode(self, lat, lng):
@@ -344,3 +475,47 @@ class MapInterface(QWidget):
             if distance(nearest_point) <= self.max_distance:
                 self.middlePoints.remove(nearest_point)
                 print(f"Removed middle point at: {nearest_point}")
+                print(f"Removed middle point at: {nearest_point}")
+
+                self.middlePoints.remove(nearest_point)
+                print(f"Removed middle point at: {nearest_point}")
+
+    def addBaseLayerControlButton(self):
+        self.browser.page().runJavaScript("""
+            if (typeof L.easyButton === 'undefined') {
+                console.error('L.easyButton is not defined');
+                return;
+            }
+
+            // Create a simple button with text instead of an icon
+            var toggleBaseLayerButton = L.easyButton({
+                states: [{
+                    stateName: 'show-base',
+                    icon: '<span style="font-size: 16px;">🗺️</span>',  // Using an emoji instead of Font Awesome
+                    title: 'Hide base layer',
+                    onClick: function(btn, map) {
+                        btn.state('hide-base');
+                        map.eachLayer(function(layer) {
+                            if(layer instanceof L.TileLayer && layer.options.attribution.includes('OpenStreetMap')) {
+                                map.removeLayer(layer);
+                            }
+                        });
+                    }
+                }, {
+                    stateName: 'hide-base',
+                    icon: '<span style="font-size: 16px;">📍</span>',  // Using an emoji instead of Font Awesome
+                    title: 'Show base layer',
+                    onClick: function(btn, map) {
+                        btn.state('show-base');
+                        var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        }).addTo(map);
+                    }
+                }]
+            });
+            toggleBaseLayerButton.addTo(map);
+            console.log('Base layer control button added');
+        """)
+    
+    # ...existing code...
+

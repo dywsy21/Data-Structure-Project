@@ -331,7 +331,7 @@ fn convex_hull(mut points: Vec<(i32, i32)>) -> Vec<(i32, i32)> {
 }
 
 fn render_map(zoom: i32, xtile: i32, ytile: i32) {
-    let cache_dir = format!("cache/{}/", zoom);
+    let cache_dir = format!("E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/renderer/cache/{}/", zoom);
     std::fs::create_dir_all(&cache_dir).unwrap();
     let cache_file_path = format!("{}{}_{}.png", cache_dir, xtile, ytile);
 
@@ -435,8 +435,8 @@ fn render_map(zoom: i32, xtile: i32, ytile: i32) {
 
 fn main() {
     let stdin = io::stdin();
-    for line in stdin.lock().lines() {
-        let line = line.unwrap();
+    let mut lines = stdin.lock().lines();
+    if let Some(Ok(line)) = lines.next() {
         let parts: Vec<i32> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
         if parts.len() == 3 {
             // time the rendering process
