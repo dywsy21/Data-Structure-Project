@@ -32,6 +32,7 @@ class MapInterface(QWidget):
         self.thread_pool = QThreadPool()
         signalBus.finishRenderingTile.connect(self.on_tiles_fetched)
         self.middlePoints = []  # Add this line
+        self.max_distance = 0.01  # Max distance limit for removing nodes
         
         self.initUI()
 
@@ -238,13 +239,41 @@ class MapInterface(QWidget):
                 if (isCtrlPressed) {{
                     // Add yellow pin for middle points
                     var marker = L.marker([lat, lng], {{icon: yellowIcon}}).addTo(map);
+                    markers.push(marker);
                     console.log("Added yellow marker at:", lat, lng);
                     window.pyObj.addMiddlePoint(lat, lng);
                 }} else {{
                     // Add default pin for selected nodes
                     var marker = L.marker([lat, lng]).addTo(map);
+                    markers.push(marker);
                     console.log("Added default marker at:", lat, lng);
                     window.pyObj.addSelectedNode(lat, lng);
+                }}
+            }});
+
+            map.on('contextmenu', function(e) {{
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
+                window.pyObj.removeNearestNode(lat, lng);
+                window.pyObj.removeNearestMiddlePoint(lat, lng);
+
+                // Remove the nearest marker
+                var nearestMarker = null;
+                var minDistance = Infinity;
+                markers.forEach(function(marker) {{
+                    var markerLatLng = marker.getLatLng();
+                    var distance = map.distance([lat, lng], markerLatLng);
+                    if (distance < minDistance) {{
+                        minDistance = distance;
+                        nearestMarker = marker;
+                    }}
+                }});
+                if (nearestMarker && minDistance <= {self.max_distance * 100000}) {{
+                    map.removeLayer(nearestMarker);
+                    markers = markers.filter(function(marker) {{
+                        return marker !== nearestMarker;
+                    }});
+                    console.log("Removed marker at:", nearestMarker.getLatLng());
                 }}
             }});
         """)
@@ -281,3 +310,25 @@ class MapInterface(QWidget):
     @pyqtSlot(float, float)
     def addMiddlePoint(self, lat, lng):
         self.middlePoints.append((lat, lng))
+
+    @pyqtSlot(float, float)
+    def removeNearestNode(self, lat, lng):
+        def distance(node):
+            return math.sqrt((node[0] - lat) ** 2 + (node[1] - lng) ** 2)
+
+        if self.selectedNodes:
+            nearest_node = min(self.selectedNodes, key=distance)
+            if distance(nearest_node) <= self.max_distance:
+                self.selectedNodes.remove(nearest_node)
+                print(f"Removed node at: {nearest_node}")
+
+    @pyqtSlot(float, float)
+    def removeNearestMiddlePoint(self, lat, lng):
+        def distance(point):
+            return math.sqrt((point[0] - lat) ** 2 + (point[1] - lng) ** 2)
+
+        if self.middlePoints:
+            nearest_point = min(self.middlePoints, key=distance)
+            if distance(nearest_point) <= self.max_distance:
+                self.middlePoints.remove(nearest_point)
+                print(f"Removed middle point at: {nearest_point}")

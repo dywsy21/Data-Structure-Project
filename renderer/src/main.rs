@@ -400,7 +400,7 @@ fn render_map(zoom: i32, xtile: i32, ytile: i32) {
             }
 
             if let Some(name) = tags.get("name") {
-                if !rendered_names.contains(name) {
+                if zoom >= 15 && !rendered_names.contains(name) {
                     let (x, y) = points[points.len() / 2];
                     name_tags.push((name.clone(), (x, y)));
                     rendered_names.insert(name.clone());
