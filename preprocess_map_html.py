@@ -1,4 +1,6 @@
 import folium, os
+
+import folium.map
 from app.common.config import *
 
 def prepare_map():
@@ -22,4 +24,4 @@ def prepare_map():
     map.save(map_html_path)
     return map
 
-map_html = prepare_map()
+print(folium.Map(path=os.path.abspath(map_html_path)).get_name())

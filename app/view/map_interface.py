@@ -14,9 +14,8 @@ import os
 import subprocess
 from ..common.signal_bus import signalBus
 import math
-from preprocess_map_html import map_html
 from map_utils import *
-
+from ..common.config import *
 
 class MapInterface(QWidget):
     def __init__(self, parent=None):
@@ -218,13 +217,11 @@ class MapInterface(QWidget):
                 }
             };
         """)
+
         
         self.browser.page().runJavaScript(f"""
-            // Access the existing Folium map
-            var map = window.{map_html.get_name()};
-
-            // Ensure the map container has the correct ID
-            document.getElementById('map').appendChild(map.getContainer());
+            // Access the global map instance
+            var map = window.map;
 
             // Initialize markers array
             var markers = [];
@@ -404,46 +401,37 @@ class MapInterface(QWidget):
         tile_path = f"renderer/cache/{z}/{x}_{y}.png"
         assert os.path.exists(tile_path), f"Tile image does not exist at {tile_path}"
         
-        custom_tile_layer_js = f"""
-            console.log("Adding custom tile layer for {z}/{x}/{y}");
-            var layerId = 'tile_{z}_{x}_{y}';
-            var custom_tile_layer = L.tileLayer(
-                "renderer/cache/{{z}}/{{x}}_{{y}}.png",
-                {{
-                    id: layerId,
-                    attribution: "Custom Tiles",
-                    maxZoom: 20,
-                    tileSize: 256,
-                    bounds: L.latLngBounds(
-                        map.unproject([{x} * 256, ({y} + 1) * 256], {z}),
-                        map.unproject([{(x + 1) * 256}, {y} * 256], {z})
-                    )
-                }}
-            );
-            window.customTileLayerGroup.addLayer(custom_tile_layer);
-            console.log("Custom tile layer added with ID:", layerId);
-            window.pyObj.addCustomTileLayerId(layerId);
-        """
-        self.browser.page().runJavaScript(custom_tile_layer_js)
+        # custom_tile_layer_js = f"""
+        #     console.log("Adding custom tile layer for {z}/{x}/{y}");
+        #     var layerId = 'tile_{z}_{x}_{y}';
+        #     var custom_tile_layer = L.tileLayer(
+        #         "E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/renderer/cache/{z}/{x}_{y}.png",
+        #         {{
+        #             id: layerId,
+        #             attribution: "Custom Tiles",
+        #             maxZoom: 20,
+        #             tileSize: 256,
+        #             bounds: L.latLngBounds(
+        #                 map.unproject([{x} * 256, ({y} + 1) * 256], {z}),
+        #                 map.unproject([{(x + 1) * 256}, {y} * 256], {z})
+        #             )
+        #         }}
+        #     );
+        #     window.customLayerGroup.addLayer(custom_tile_layer);
+        #     console.log("Custom tile layer added with ID:", layerId);
+        #     window.pyObj.addCustomTileLayerId(layerId);
+        # """
+        # self.browser.page().runJavaScript(custom_tile_layer_js)
 
     @pyqtSlot(str)
     def addCustomTileLayerId(self, layer_id):
         self.custom_tile_layer_ids.append(layer_id)
 
     def closeEvent(self, event):
-        # Remove all custom tile layers by ID
-        if self.custom_tile_layer_ids:
-            js_code = """
-                var layerIds = %s;
-                layerIds.forEach(function(layerId) {
-                    map.eachLayer(function(layer) {
-                        if(layer.options && layer.options.id === layerId) {
-                            map.removeLayer(layer);
-                        }
-                    });
-                });
-            """ % json.dumps(self.custom_tile_layer_ids)
-            self.browser.page().runJavaScript(js_code)
+        self.browser.page().runJavaScript("""
+            window.customLayerGroup.clearLayers();
+            window.baseLayerGroup.clearLayers();
+        """)
         super().closeEvent(event)
 
     @pyqtSlot(float, float)
@@ -478,41 +466,34 @@ class MapInterface(QWidget):
                     print(f"Removed middle point at: {nearest_point}")
 
     def addBaseLayerControlButton(self):
-        self.browser.page().runJavaScript("""
-            if (typeof L.easyButton === 'undefined') {
-                console.error('L.easyButton is not defined');
-                return;
-            }
+        pass
+    #     self.browser.page().runJavaScript("""
+    #         if (typeof L.easyButton === 'undefined') {
+    #             console.error('L.easyButton is not defined');
+    #             return;
+    #         }
 
-            // Create a simple button with text instead of an icon
-            var toggleBaseLayerButton = L.easyButton({
-                states: [{
-                    stateName: 'show-base',
-                    icon: '<span style="font-size: 16px;">🗺️</span>',  // Using an emoji instead of Font Awesome
-                    title: 'Hide base layer',
-                    onClick: function(btn, map) {
-                        btn.state('hide-base');
-                        map.eachLayer(function(layer) {
-                            if(layer instanceof L.TileLayer && layer.options.attribution.includes('OpenStreetMap')) {
-                                map.removeLayer(layer);
-                            }
-                        });
-                    }
-                }, {
-                    stateName: 'hide-base',
-                    icon: '<span style="font-size: 16px;">📍</span>',  // Using an emoji instead of Font Awesome
-                    title: 'Show base layer',
-                    onClick: function(btn, map) {
-                        btn.state('show-base');
-                        var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                        }).addTo(map);
-                    }
-                }]
-            });
-            toggleBaseLayerButton.addTo(map);
-            console.log('Base layer control button added');
-        """)
+    #         var toggleBaseLayerButton = L.easyButton({
+    #             states: [{
+    #                 stateName: 'show-base',
+    #                 icon: '<span style="font-size: 16px;">🗺️</span>',
+    #                 title: 'Hide base layer',
+    #                 onClick: function(btn, map) {
+    #                     btn.state('hide-base');
+    #                     window.baseLayerGroup.hideLayer();
+    #                 }
+    #             }, {
+    #                 stateName: 'hide-base',
+    #                 icon: '<span style="font-size: 16px;">📍</span>',
+    #                 title: 'Show base layer',
+    #                 onClick: function(btn, map) {
+    #                     btn.state('show-base');
+    #                     window.baseLayerGroup.showLayer();
+    #                 }
+    #             }]
+    #         });
+    #         toggleBaseLayerButton.addTo(map);
+    #     """)
     
-    # ...existing code...
+    # # ...existing code...
 
