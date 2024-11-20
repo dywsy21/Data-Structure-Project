@@ -337,6 +337,7 @@ class MapInterface(QWidget):
                     window.pyObj.addSelectedNode(lat, lng);
                 }}
             }});
+            
 
             map.on('contextmenu', function(e) {{
                 var lat = e.latlng.lat;
@@ -363,6 +364,23 @@ class MapInterface(QWidget):
                     console.log("Removed marker at:", nearestMarker.getLatLng());
                 }}
             }});
+
+            function refreshCustomLayerGroup() {{
+                window.customLayerGroup.eachLayer(function (layer) {{
+                    Object.values(layer._tiles).forEach(function(tile) {{
+                        if (!tile.loaded) {{
+                            console.log("Reloading tile:", tile);
+                            var img = tile.el;
+                            var src = img.src;
+                            img.src = ''; // Clear the src to force reload
+                            img.src = src; // Set the src back to reload the tile
+                        }}
+                    }});
+                }});
+            }}
+
+            setInterval(refreshCustomLayerGroup, 1000); // Refresh every second
+
         """)
 
     @pyqtSlot()

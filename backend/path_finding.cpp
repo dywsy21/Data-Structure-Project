@@ -1,5 +1,8 @@
 #include "path_finding.h"
 #include "tinyxml/tinyxml.h" // Ensure the path is correct
+#include "sqlite3.h"
+#include "utils.h"
+
 #include <iostream>
 #include <sstream> // Include this header for std::istringstream
 #include <queue>
@@ -103,34 +106,6 @@ bool load_graph(const std::string& filepath,
     return true;
 }
 
-// Helper function to determine if a node is allowed based on whitelist
-bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::string>& node_tags,
-                    bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    auto it = node_tags.find(node_id);
-    if (it == node_tags.end()) return false;
-
-    const std::string& highway_type = it->second;
-
-    if (pedestrian && (highway_type == "pedestrian" || highway_type == "footway" ||
-                      highway_type == "steps" || highway_type == "path" ||
-                      highway_type == "living_street"))
-        return true;
-    if (riding && (highway_type == "cycleway" || highway_type == "path" ||
-                  highway_type == "track"))
-        return true;
-    if (driving && (highway_type == "motorway" || highway_type == "trunk" ||
-                   highway_type == "primary" || highway_type == "secondary" ||
-                   highway_type == "tertiary" || highway_type == "service" ||
-                   highway_type == "motorway_link" || highway_type == "trunk_link" ||
-                   highway_type == "primary_link" || highway_type == "secondary_link" ||
-                   highway_type == "residential"))
-        return true;
-    if (pubTransport && (highway_type == "bus_stop" || highway_type == "motorway_junction" ||
-                        highway_type == "traffic_signals" || highway_type == "crossing"))
-        return true;
-
-    return false;
-}
 
 // Function to find the shortest path using Dijkstra's algorithm
 std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph, uint32_t start, uint32_t end,

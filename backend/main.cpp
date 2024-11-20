@@ -1,5 +1,8 @@
 #include "tinyxml/tinyxml.h"
 #include "path_finding.h"
+#include "sqlite3.h"
+#include "utils.h"
+
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -50,28 +53,35 @@ int main(int argc, char* argv[]) {
     }
 
     std::string algorithm;
-    uint64_t start_id, end_id;
-    while (std::cin >> algorithm >> start_id >> end_id >> pedestrian_enabled >> riding_enabled >> driving_enabled >> pubTransport_enabled) {
-        // Convert node IDs to indices
-        if (node_id_to_index.find(start_id) == node_id_to_index.end() ||
-            node_id_to_index.find(end_id) == node_id_to_index.end()) {
-            std::cerr << "Invalid node IDs provided." << std::endl;
-            continue;
+    int node_number;
+    std::vector<std::pair<double, double>> node_coords;
+    std::vector<int> node_ids;
+
+    while (std::cin >> algorithm >> pedestrian_enabled >> riding_enabled >> driving_enabled >> pubTransport_enabled >> node_number) {
+
+        for(int i = 0; i < node_number; i++) {
+            double lat, lon;
+            std::cin >> lat >> lon;
+            node_coords.push_back({lat, lon});
         }
-        uint32_t start_idx = node_id_to_index[start_id];
-        uint32_t end_idx = node_id_to_index[end_id];
+
+        preprocess_node_ids(node_coords, node_ids, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
 
         auto start_time = std::chrono::high_resolution_clock::now(); // Start timing
 
+
         std::vector<uint32_t> path_indices;
+        for(int i = 0; i < node_number; i++){
+
+        }
         if (algorithm == "Dijkstra") {
-            path_indices = dijkstra(graph, start_idx, end_idx, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+            path_indices.insert(path_indices.end(), dijkstra(graph, start_idx, end_idx, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled));
         } else if (algorithm == "A*") {
-            path_indices = a_star(graph, start_idx, end_idx, node_coords, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+            path_indices.insert(path_indices.end(), a_star(graph, start_idx, end_idx, node_coords, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled));
         } else if (algorithm == "Bellman-Ford") {
-            path_indices = bellman_ford(graph, start_idx, end_idx, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+            path_indices.insert(path_indices.end(), bellman_ford(graph, start_idx, end_idx, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled));
         } else if (algorithm == "Floyd-Warshall") {
-            path_indices = floyd_warshall(graph, start_idx, end_idx, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+            path_indices.insert(path_indices.end(), floyd_warshall(graph, start_idx, end_idx, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled));
         } else {
             std::cerr << "Unknown algorithm: " << algorithm << std::endl;
             continue;

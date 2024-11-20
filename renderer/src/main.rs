@@ -131,7 +131,7 @@ fn query_ways_from_db(
     target_tile: (i32, i32),
 ) -> Vec<(Vec<(f64, f64)>, HashMap<String, String>)> {
     let start = std::time::Instant::now();
-    let conn = Connection::open(db_path).unwrap();
+    let mut conn = Connection::open(db_path).unwrap();
 
     let (tile_min_lat, tile_min_lon) = tile_to_lat_lon(target_tile.0, target_tile.1 + 1, zoom);
     let (tile_max_lat, tile_max_lon) = tile_to_lat_lon(target_tile.0 + 1, target_tile.1, zoom);
@@ -151,48 +151,43 @@ fn query_ways_from_db(
         .unwrap()
         .filter_map(Result::ok)
         .collect();
+    drop(stmt); // Drop the immutable borrow here
 
     println!("Phase 1: {:?}", start.elapsed());
     let start_phase2 = std::time::Instant::now();
 
-    // Determine approximation rate based on zoom level
-    let approximation_rate = match zoom {
-        15..=20 => 1,
-        10..=14 => 1,
-        5..=9 => 1,
-        _ => 1,
-    };
+    // Create a temporary table in the main database connection to store way IDs
+    // conn.execute("CREATE TEMP TABLE way_id (id INTEGER PRIMARY KEY)", []).unwrap();
 
-    // Limit the number of way_ids to process
-    let mut way_ids = way_ids;
-    if way_ids.len() > 1000 {
-        way_ids = way_ids.into_iter().step_by(approximation_rate).collect();
+    // Insert way IDs into the temporary table
+    {
+        let tx = conn.transaction().unwrap();
+        {
+            let mut stmt = tx.prepare("INSERT INTO way_id (id) VALUES (?)").unwrap();
+
+            for way_id in &way_ids {
+                stmt.execute([way_id]).unwrap();
+            }
+        }
+        // tx.execute("CREATE INDEX idx_tw_id ON way_id (id)", []).unwrap();
+        tx.commit().unwrap();
     }
 
-    // Phase 2: Fetch all way_nodes and way_tags in bulk
-    let way_ids_placeholder = way_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    
-    // Fetch nodes for all ways
-    let mut node_query = format!(
-        "SELECT wn.way_id, n.lat, n.lon 
-         FROM way_nodes wn 
-         JOIN nodes n ON wn.node_id = n.id 
-         WHERE wn.way_id IN ({}) 
-         ORDER BY wn.way_id, wn.rowid",
-        way_ids_placeholder
-    );
-    let mut node_stmt = conn.prepare(&node_query).unwrap();
+    // Phase 2: Fetch all way_nodes and way_tags in bulk using the main connection and temporary table
+    let node_query = "SELECT wn.way_id, n.lat, n.lon 
+                      FROM way_nodes wn 
+                      JOIN nodes n ON wn.node_id = n.id 
+                      JOIN way_id tw ON wn.way_id = tw.id 
+                      ORDER BY wn.way_id, wn.rowid";
+    let mut node_stmt = conn.prepare(node_query).unwrap();
     let node_rows = node_stmt
-        .query_map(
-            rusqlite::params_from_iter(way_ids.iter()),
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?, // way_id
-                    row.get::<_, f64>(1)?, // lat
-                    row.get::<_, f64>(2)?, // lon
-                ))
-            },
-        )
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?, // way_id
+                row.get::<_, f64>(1)?, // lat
+                row.get::<_, f64>(2)?, // lon
+            ))
+        })
         .unwrap();
 
     // Build a mapping from way_id to list of node coordinates
@@ -207,23 +202,19 @@ fn query_ways_from_db(
         }
     }
 
-    // Fetch tags for all ways
-    let mut tag_query = format!(
-        "SELECT way_id, k, v FROM way_tags WHERE way_id IN ({})",
-        way_ids_placeholder
-    );
-    let mut tag_stmt = conn.prepare(&tag_query).unwrap();
+    // Fetch tags for all ways using the main connection and temporary table
+    let tag_query = "SELECT wt.way_id, wt.k, wt.v 
+                     FROM way_tags wt 
+                     JOIN way_id tw ON wt.way_id = tw.id";
+    let mut tag_stmt = conn.prepare(tag_query).unwrap();
     let tag_rows = tag_stmt
-        .query_map(
-            rusqlite::params_from_iter(way_ids.iter()),
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?, // way_id
-                    row.get::<_, String>(1)?, // key
-                    row.get::<_, String>(2)?, // value
-                ))
-            },
-        )
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?, // way_id
+                row.get::<_, String>(1)?, // key
+                row.get::<_, String>(2)?, // value
+            ))
+        })
         .unwrap();
 
     // Build a mapping from way_id to tags

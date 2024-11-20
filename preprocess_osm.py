@@ -108,7 +108,12 @@ def preprocess_osm_data(osm_file_path, db_path):
     # Create indexes
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_nodes_lat_lon ON nodes(lat, lon)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_ways_bbox ON ways(min_lat, max_lat, min_lon, max_lon)')
-    
+    cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_id ON nodes(id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_way_nods_node_id ON way_nodes(node_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_way_nods_way_id ON way_nodes(way_id)')
+
+
+
     conn.commit()
     conn.close()
 
