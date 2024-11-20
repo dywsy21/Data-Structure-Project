@@ -16,6 +16,7 @@ from ..common.signal_bus import signalBus
 import math
 from map_utils import *
 from ..common.config import *
+import concurrent.futures
 
 class MapInterface(QWidget):
     def __init__(self, parent=None):
@@ -35,6 +36,7 @@ class MapInterface(QWidget):
         self.middlePoints = []  # Add this line
         self.max_distance = 0.01  # Max distance limit for removing nodes
         self.custom_tile_layer_ids = []  # Store layer IDs instead of layer objects
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)  # Add this line
         
         self.initUI()
 
@@ -377,7 +379,7 @@ class MapInterface(QWidget):
             self.begin_rendering_tile(zoom, tile[0], tile[1])
     
     def begin_rendering_tile(self, z, x, y):
-        # Render the tile using renderer.exe
+        # Render the tile using renderer.exe asynchronously
         def render_tile(z, x, y):
             process = subprocess.Popen(
                 ["renderer/target/release/renderer.exe"],
@@ -394,8 +396,8 @@ class MapInterface(QWidget):
                 print(f"Successfully rendered tile {z}/{x}/{y}")
             signalBus.finishRenderingTile.emit(z, x, y)
 
-        render_tile(z, x, y)
-        
+        # Submit the rendering task to the executor
+        self.executor.submit(render_tile, z, x, y)
 
     def on_tiles_fetched(self, z, x, y):
         tile_path = f"renderer/cache/{z}/{x}_{y}.png"
@@ -427,12 +429,14 @@ class MapInterface(QWidget):
     def addCustomTileLayerId(self, layer_id):
         self.custom_tile_layer_ids.append(layer_id)
 
-    def closeEvent(self, event):
+    def closeEvent(self, a0):
+        # Shutdown the executor
+        self.executor.shutdown(wait=False)
         self.browser.page().runJavaScript("""
             window.customLayerGroup.clearLayers();
             window.baseLayerGroup.clearLayers();
         """)
-        super().closeEvent(event)
+        super().closeEvent(a0)
 
     @pyqtSlot(float, float)
     def addSelectedNode(self, lat, lng):
