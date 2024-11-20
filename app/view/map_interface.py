@@ -3,6 +3,7 @@ from multiprocessing import process
 from PyQt5.QtCore import * # type: ignore
 from PyQt5.QtGui import * # type: ignore
 from PyQt5.QtWidgets import * # type: ignore
+from inquirer import Checkbox
 from numpy import signbit
 from qfluentwidgets import * # type: ignore
 from PyQt5.QtWebEngineWidgets import * # type: ignore
@@ -138,6 +139,11 @@ class MapInterface(QWidget):
         self.progressBar.setVisible(False)
 
         self.rightLayout.addWidget(self.progressBar)
+
+        # Add a checkbox to toggle layer visibility
+        self.layerToggleCheckbox = CheckBox("Show Custom Rendered Layer", self.lowerWidget)
+        self.layerToggleCheckbox.stateChanged.connect(self.toggleLayerVisibility)
+        self.rightLayout.addWidget(self.layerToggleCheckbox)
 
         # Add spacing between layouts
         self.lowerLayout.addLayout(self.leftLayout)
@@ -379,6 +385,8 @@ class MapInterface(QWidget):
             self.begin_rendering_tile(zoom, tile[0], tile[1])
     
     def begin_rendering_tile(self, z, x, y):
+        if os.path.exists(f"renderer/cache/{z}/{x}_{y}.png"):
+            return
         # Render the tile using renderer.exe asynchronously
         def render_tile(z, x, y):
             process = subprocess.Popen(
@@ -400,30 +408,18 @@ class MapInterface(QWidget):
         self.executor.submit(render_tile, z, x, y)
 
     def on_tiles_fetched(self, z, x, y):
-        tile_path = f"renderer/cache/{z}/{x}_{y}.png"
-        assert os.path.exists(tile_path), f"Tile image does not exist at {tile_path}"
-        
-        # custom_tile_layer_js = f"""
-        #     console.log("Adding custom tile layer for {z}/{x}/{y}");
+        pass
+        # # Refresh the custom tile layer
+        # self.browser.page().runJavaScript(f"""
         #     var layerId = 'tile_{z}_{x}_{y}';
-        #     var custom_tile_layer = L.tileLayer(
-        #         "E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/renderer/cache/{z}/{x}_{y}.png",
-        #         {{
-        #             id: layerId,
-        #             attribution: "Custom Tiles",
-        #             maxZoom: 20,
-        #             tileSize: 256,
-        #             bounds: L.latLngBounds(
-        #                 map.unproject([{x} * 256, ({y} + 1) * 256], {z}),
-        #                 map.unproject([{(x + 1) * 256}, {y} * 256], {z})
-        #             )
+        #     window.customLayerGroup.eachLayer(function (layer) {{
+        #         if (layer.options.id === layerId) {{
+        #             var url = layer.getTileUrl({{x: {x}, y: {y}, z: {z}}});
+        #             layer.redraw();
+        #             console.log("Custom tile layer refreshed with ID:", layerId);
         #         }}
-        #     );
-        #     window.customLayerGroup.addLayer(custom_tile_layer);
-        #     console.log("Custom tile layer added with ID:", layerId);
-        #     window.pyObj.addCustomTileLayerId(layerId);
-        # """
-        # self.browser.page().runJavaScript(custom_tile_layer_js)
+        #     }});
+        # """)
 
     @pyqtSlot(str)
     def addCustomTileLayerId(self, layer_id):
@@ -468,6 +464,27 @@ class MapInterface(QWidget):
                 if nearest_point in self.middlePoints:
                     self.middlePoints.remove(nearest_point)
                     print(f"Removed middle point at: {nearest_point}")
+
+    @pyqtSlot(int)
+    def toggleLayerVisibility(self, state):
+        if state != Qt.Checked:
+            self.browser.page().runJavaScript("""
+                window.baseLayerGroup.eachLayer(function (layer) {
+                    layer.setOpacity(1);
+                });
+                window.customLayerGroup.eachLayer(function (layer) {
+                    layer.setOpacity(0);
+                });
+            """)
+        else:
+            self.browser.page().runJavaScript("""
+                window.baseLayerGroup.eachLayer(function (layer) {
+                    layer.setOpacity(0);
+                });
+                window.customLayerGroup.eachLayer(function (layer) {
+                    layer.setOpacity(1);
+                });
+            """)
 
     def addBaseLayerControlButton(self):
         pass
