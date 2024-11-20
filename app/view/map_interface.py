@@ -473,12 +473,9 @@ class MapInterface(QWidget):
         if self.middlePoints:
             nearest_point = min(self.middlePoints, key=distance)
             if distance(nearest_point) <= self.max_distance:
-                self.middlePoints.remove(nearest_point)
-                print(f"Removed middle point at: {nearest_point}")
-                print(f"Removed middle point at: {nearest_point}")
-
-                self.middlePoints.remove(nearest_point)
-                print(f"Removed middle point at: {nearest_point}")
+                if nearest_point in self.middlePoints:
+                    self.middlePoints.remove(nearest_point)
+                    print(f"Removed middle point at: {nearest_point}")
 
     def addBaseLayerControlButton(self):
         self.browser.page().runJavaScript("""
