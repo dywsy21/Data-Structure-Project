@@ -11,7 +11,7 @@ from PyQt5.QtWebChannel import * # type: ignore
 from ..common.config import *
 from ..common.style_sheet import StyleSheet
 from ..common.icon import Icon
-import os
+import os, shutil
 import subprocess
 from ..common.signal_bus import signalBus
 import math
@@ -430,16 +430,15 @@ class MapInterface(QWidget):
             self.begin_rendering_tile(zoom, tile[0], tile[1])
     
     def begin_rendering_tile(self, z, x, y):
-        if self.currentLayerType == "custom" and z <= 12:
+        if self.currentLayerType == "custom" and z <= 13:
             renderer_path = "renderer/target/release/renderer.exe"
         else:
             renderer_path = "renderer_sparse/target/release/renderer.exe"
 
         if os.path.exists(f"{renderer_path}/cache/{z}/{x}_{y}.png"):
-            if self.currentLayerType == "custom" and z > 12:
+            if self.currentLayerType == "custom" and z > 13:
                 # copy the tile to the custom layer
                 os.makedirs(f"renderer/cache/{z}", exist_ok=True)
-                import shutil
                 shutil.copyfile(f"renderer_sparse/cache/{z}/{x}_{y}.png", f"renderer/cache/{z}/{x}_{y}.png")
             return
 
@@ -457,10 +456,14 @@ class MapInterface(QWidget):
             if process.returncode != 0:
                 print(f"Error rendering tile {z}/{x}/{y}: {stderr.decode()}")
             else:
-                if self.currentLayerType == "custom" and z <= 12:
+                if self.currentLayerType == "custom" and z <= 13:
                     print(f"Successfully rendered tile {z}/{x}/{y}")
                 else:
                     print(f"Successfully rendered sparse tile {z}/{x}/{y}")
+                if self.currentLayerType == "custom" and z > 13:
+                    # copy the tile to the custom layer
+                    os.makedirs(f"renderer/cache/{z}", exist_ok=True)
+                    shutil.copyfile(f"renderer_sparse/cache/{z}/{x}_{y}.png", f"renderer/cache/{z}/{x}_{y}.png")
             signalBus.finishRenderingTile.emit(z, x, y)
 
         # Submit the rendering task to the executor
