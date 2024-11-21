@@ -157,7 +157,7 @@ fn query_ways_from_db(
     let start_phase2 = std::time::Instant::now();
 
     // Create a temporary table in the main database connection to store way IDs
-    // conn.execute("CREATE TEMP TABLE way_id (id INTEGER PRIMARY KEY)", []).unwrap();
+    conn.execute("CREATE TEMP TABLE way_id (id INTEGER PRIMARY KEY)", []).unwrap();
 
     // Insert way IDs into the temporary table
     {
@@ -238,7 +238,7 @@ fn query_ways_from_db(
         }
     }
 
-    conn.prepare("DELETE FROM way_id").unwrap();
+    // conn.prepare("DELETE FROM way_id").unwrap();
 
     println!("Phase 2: {:?}", start_phase2.elapsed());
 

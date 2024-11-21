@@ -38,6 +38,7 @@ class MapInterface(QWidget):
         self.max_distance = 0.01  # Max distance limit for removing nodes
         self.custom_tile_layer_ids = []  # Store layer IDs instead of layer objects
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)  # Add this line
+        self.currentLayerType = "default"  # Store the current layer type
         
         self.initUI()
 
