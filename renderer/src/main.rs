@@ -176,9 +176,9 @@ fn query_ways_from_db(
     // Phase 2: Fetch all way_nodes and way_tags in bulk using the main connection and temporary table
     let node_query = "SELECT wn.way_id, n.lat, n.lon 
                       FROM way_nodes wn 
-                      JOIN nodes n ON wn.node_id = n.id 
-                      JOIN way_id tw ON wn.way_id = tw.id 
-                      ORDER BY wn.way_id, wn.rowid";
+                      JOIN nodes n ON wn.node_id = n.id
+                      WHERE wn.way_id IN (SELECT id FROM way_id)"; 
+                     
     let mut node_stmt = conn.prepare(node_query).unwrap();
     let node_rows = node_stmt
         .query_map([], |row| {
@@ -237,6 +237,8 @@ fn query_ways_from_db(
             }
         }
     }
+
+    conn.prepare("DELETE FROM way_id").unwrap();
 
     println!("Phase 2: {:?}", start_phase2.elapsed());
 

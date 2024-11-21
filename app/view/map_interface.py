@@ -37,7 +37,7 @@ class MapInterface(QWidget):
         self.middlePoints = []  # Add this line
         self.max_distance = 0.01  # Max distance limit for removing nodes
         self.custom_tile_layer_ids = []  # Store layer IDs instead of layer objects
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)  # Add this line
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)  # Add this line
         
         self.initUI()
 
@@ -368,8 +368,7 @@ class MapInterface(QWidget):
             function refreshCustomLayerGroup() {{
                 window.customLayerGroup.eachLayer(function (layer) {{
                     Object.values(layer._tiles).forEach(function(tile) {{
-                        if (!tile.loaded) {{
-                            console.log("Reloading tile:", tile);
+                        if (true) {{
                             var img = tile.el;
                             var src = img.src;
                             img.src = ''; // Clear the src to force reload
