@@ -9,3 +9,4 @@ backend/data/*
 map*
 map_large
 renderer/cache/*
+renderer_sparse/cache/*

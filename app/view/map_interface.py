@@ -140,10 +140,11 @@ class MapInterface(QWidget):
 
         self.rightLayout.addWidget(self.progressBar)
 
-        # Add a checkbox to toggle layer visibility
-        self.layerToggleCheckbox = CheckBox("Show Custom Rendered Layer", self.lowerWidget)
-        self.layerToggleCheckbox.stateChanged.connect(self.toggleLayerVisibility)
-        self.rightLayout.addWidget(self.layerToggleCheckbox)
+        # Add a SplitPushButton to toggle layer visibility
+        self.layerToggleButton = SplitPushButton("Select Map Layer", self.lowerWidget)
+        self.addLayersToButton()
+        self.layerToggleButton.clicked.connect(self.onLayerToggleButtonClicked)
+        self.rightLayout.addWidget(self.layerToggleButton)
 
         # Add spacing between layouts
         self.lowerLayout.addLayout(self.leftLayout)
@@ -169,9 +170,36 @@ class MapInterface(QWidget):
                 self.menu.addAction(action)
             self.algorithmButton.setFlyout(self.menu)
 
+    def addLayersToButton(self):
+        self.layerMenu = RoundMenu(parent=self)
+        layers = [("Default Map", "default"), ("Custom Rendered Map", "custom"), ("Custom Rendered Map (Sparse)", "custom_sparse")]
+        for layer_name, layer_type in layers:
+            action = Action(layer_name, self)
+            action.triggered.connect(lambda checked, lt=layer_type: self.setLayer(lt))
+            self.layerMenu.addAction(action)
+        self.layerToggleButton.setFlyout(self.layerMenu)
+
     def setAlgorithm(self, algorithm):
         self.selectedAlgorithm = algorithm
         self.algorithmButton.setText(f"Algorithm: {algorithm}")
+
+    def setLayer(self, layerType):
+        self.layerToggleButton.setText(f"Layer: {layerType.replace('_', ' ').title()}")
+        self.toggleLayerVisibility(layerType)
+        self.currentLayerType = layerType  # Store the current layer type
+
+    @pyqtSlot(str)
+    def toggleLayerVisibility(self, layerType):
+        self.browser.page().runJavaScript(f"toggleLayerVisibility('{layerType}');")
+
+    def onLayerToggleButtonClicked(self):
+        current_text = self.layerToggleButton.text()
+        if "Default Map" in current_text:
+            self.toggleLayerVisibility("default")
+        elif "Custom Rendered Map" in current_text:
+            self.toggleLayerVisibility("custom")
+        elif "Custom Rendered Map (Sparse)" in current_text:
+            self.toggleLayerVisibility("custom_sparse")
 
     @pyqtSlot(int, str, int, str)
     def handleConsoleMessage(self, level, message, lineNumber, sourceID):
@@ -402,12 +430,18 @@ class MapInterface(QWidget):
             self.begin_rendering_tile(zoom, tile[0], tile[1])
     
     def begin_rendering_tile(self, z, x, y):
-        if os.path.exists(f"renderer/cache/{z}/{x}_{y}.png"):
+        if self.currentLayerType == "custom" and z <= 12:
+            renderer_path = "renderer/target/release/renderer.exe"
+        else:
+            renderer_path = "renderer_sparse/target/release/renderer.exe"
+
+        if os.path.exists(f"{renderer_path}/cache/{z}/{x}_{y}.png"):
             return
-        # Render the tile using renderer.exe asynchronously
+
+        # Render the tile using the appropriate renderer executable asynchronously
         def render_tile(z, x, y):
             process = subprocess.Popen(
-                ["renderer/target/release/renderer.exe"],
+                [renderer_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
@@ -418,7 +452,10 @@ class MapInterface(QWidget):
             if process.returncode != 0:
                 print(f"Error rendering tile {z}/{x}/{y}: {stderr.decode()}")
             else:
-                print(f"Successfully rendered tile {z}/{x}/{y}")
+                if self.currentLayerType == "custom" and z <= 12:
+                    print(f"Successfully rendered tile {z}/{x}/{y}")
+                else:
+                    print(f"Successfully rendered sparse tile {z}/{x}/{y}")
             signalBus.finishRenderingTile.emit(z, x, y)
 
         # Submit the rendering task to the executor
@@ -482,26 +519,26 @@ class MapInterface(QWidget):
                     self.middlePoints.remove(nearest_point)
                     print(f"Removed middle point at: {nearest_point}")
 
-    @pyqtSlot(int)
-    def toggleLayerVisibility(self, state):
-        if state != Qt.Checked:
-            self.browser.page().runJavaScript("""
-                window.baseLayerGroup.eachLayer(function (layer) {
-                    layer.setOpacity(1);
-                });
-                window.customLayerGroup.eachLayer(function (layer) {
-                    layer.setOpacity(0);
-                });
-            """)
-        else:
-            self.browser.page().runJavaScript("""
-                window.baseLayerGroup.eachLayer(function (layer) {
-                    layer.setOpacity(0);
-                });
-                window.customLayerGroup.eachLayer(function (layer) {
-                    layer.setOpacity(1);
-                });
-            """)
+    # @pyqtSlot(int)
+    # def toggleLayerVisibility(self, state):
+    #     if state != Qt.Checked:
+    #         self.browser.page().runJavaScript("""
+    #             window.baseLayerGroup.eachLayer(function (layer) {
+    #                 layer.setOpacity(1);
+    #             });
+    #             window.customLayerGroup.eachLayer(function (layer) {
+    #                 layer.setOpacity(0);
+    #             });
+    #         """)
+    #     else:
+    #         self.browser.page().runJavaScript("""
+    #             window.baseLayerGroup.eachLayer(function (layer) {
+    #                 layer.setOpacity(0);
+    #             });
+    #             window.customLayerGroup.eachLayer(function (layer) {
+    #                 layer.setOpacity(1);
+    #             });
+    #         """)
 
     def addBaseLayerControlButton(self):
         pass
