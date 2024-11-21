@@ -436,6 +436,11 @@ class MapInterface(QWidget):
             renderer_path = "renderer_sparse/target/release/renderer.exe"
 
         if os.path.exists(f"{renderer_path}/cache/{z}/{x}_{y}.png"):
+            if self.currentLayerType == "custom" and z > 12:
+                # copy the tile to the custom layer
+                os.makedirs(f"renderer/cache/{z}", exist_ok=True)
+                import shutil
+                shutil.copyfile(f"renderer_sparse/cache/{z}/{x}_{y}.png", f"renderer/cache/{z}/{x}_{y}.png")
             return
 
         # Render the tile using the appropriate renderer executable asynchronously
