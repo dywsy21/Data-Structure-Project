@@ -1,6 +1,4 @@
-#include "tinyxml/tinyxml.h"
 #include "path_finding.h"
-#include "sqlite/sqlite3.h"
 #include "defs.h"
 #include "k-dtree.h"
 
@@ -52,8 +50,14 @@ int main(int argc, char* argv[]) {
 
         // Function to find nearest node IDs from coordinates
         for (const auto& coord : node_coords) {
-            uint64_t node_id = get_nearest_node_id(db, coord.first, coord.second, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+            uint64_t node_id = get_nearest_node_id(kd_tree, coord.first, coord.second, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
             node_ids.push_back(node_id);
+        }
+
+        // if any id of the node is 0, print "NO PATH" and continue
+        if (std::find(node_ids.begin(), node_ids.end(), 0) != node_ids.end()) {
+            std::cout << "NO PATH" << std::endl;
+            continue;
         }
 
         #ifdef DEBUG
@@ -72,13 +76,13 @@ int main(int argc, char* argv[]) {
             uint64_t start_id = node_ids[i];
             uint64_t end_id = node_ids[i + 1];
 
-            std::vector<uint64_t> path_segment;
+            std::vector<uint32_t> path_segment;
             if (algorithm == "Dijkstra") {
-                path_segment = dijkstra(kd_tree, start_id, end_id, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+                path_segment = dijkstra(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
             } else if (algorithm == "A*") {
-                path_segment = a_star(kd_tree, start_id, end_id, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+                path_segment = a_star(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_coords, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
             } else if (algorithm == "Bellman-Ford") {
-                path_segment = bellman_ford(kd_tree, start_id, end_id, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+                path_segment = bellman_ford(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
             } else {
                 std::cerr << "Unknown algorithm: " << algorithm << std::endl;
                 continue;

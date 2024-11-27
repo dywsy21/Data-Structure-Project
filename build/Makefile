@@ -224,102 +224,6 @@ pugixml/pugixml.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/pugixml/pugixml.cpp.s
 .PHONY : pugixml/pugixml.cpp.s
 
-tinyxml/tinystr.obj: tinyxml/tinystr.cpp.obj
-.PHONY : tinyxml/tinystr.obj
-
-# target to build an object file
-tinyxml/tinystr.cpp.obj:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinystr.cpp.obj
-.PHONY : tinyxml/tinystr.cpp.obj
-
-tinyxml/tinystr.i: tinyxml/tinystr.cpp.i
-.PHONY : tinyxml/tinystr.i
-
-# target to preprocess a source file
-tinyxml/tinystr.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinystr.cpp.i
-.PHONY : tinyxml/tinystr.cpp.i
-
-tinyxml/tinystr.s: tinyxml/tinystr.cpp.s
-.PHONY : tinyxml/tinystr.s
-
-# target to generate assembly for a file
-tinyxml/tinystr.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinystr.cpp.s
-.PHONY : tinyxml/tinystr.cpp.s
-
-tinyxml/tinyxml.obj: tinyxml/tinyxml.cpp.obj
-.PHONY : tinyxml/tinyxml.obj
-
-# target to build an object file
-tinyxml/tinyxml.cpp.obj:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxml.cpp.obj
-.PHONY : tinyxml/tinyxml.cpp.obj
-
-tinyxml/tinyxml.i: tinyxml/tinyxml.cpp.i
-.PHONY : tinyxml/tinyxml.i
-
-# target to preprocess a source file
-tinyxml/tinyxml.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxml.cpp.i
-.PHONY : tinyxml/tinyxml.cpp.i
-
-tinyxml/tinyxml.s: tinyxml/tinyxml.cpp.s
-.PHONY : tinyxml/tinyxml.s
-
-# target to generate assembly for a file
-tinyxml/tinyxml.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxml.cpp.s
-.PHONY : tinyxml/tinyxml.cpp.s
-
-tinyxml/tinyxmlerror.obj: tinyxml/tinyxmlerror.cpp.obj
-.PHONY : tinyxml/tinyxmlerror.obj
-
-# target to build an object file
-tinyxml/tinyxmlerror.cpp.obj:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxmlerror.cpp.obj
-.PHONY : tinyxml/tinyxmlerror.cpp.obj
-
-tinyxml/tinyxmlerror.i: tinyxml/tinyxmlerror.cpp.i
-.PHONY : tinyxml/tinyxmlerror.i
-
-# target to preprocess a source file
-tinyxml/tinyxmlerror.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxmlerror.cpp.i
-.PHONY : tinyxml/tinyxmlerror.cpp.i
-
-tinyxml/tinyxmlerror.s: tinyxml/tinyxmlerror.cpp.s
-.PHONY : tinyxml/tinyxmlerror.s
-
-# target to generate assembly for a file
-tinyxml/tinyxmlerror.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxmlerror.cpp.s
-.PHONY : tinyxml/tinyxmlerror.cpp.s
-
-tinyxml/tinyxmlparser.obj: tinyxml/tinyxmlparser.cpp.obj
-.PHONY : tinyxml/tinyxmlparser.obj
-
-# target to build an object file
-tinyxml/tinyxmlparser.cpp.obj:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxmlparser.cpp.obj
-.PHONY : tinyxml/tinyxmlparser.cpp.obj
-
-tinyxml/tinyxmlparser.i: tinyxml/tinyxmlparser.cpp.i
-.PHONY : tinyxml/tinyxmlparser.i
-
-# target to preprocess a source file
-tinyxml/tinyxmlparser.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxmlparser.cpp.i
-.PHONY : tinyxml/tinyxmlparser.cpp.i
-
-tinyxml/tinyxmlparser.s: tinyxml/tinyxmlparser.cpp.s
-.PHONY : tinyxml/tinyxmlparser.s
-
-# target to generate assembly for a file
-tinyxml/tinyxmlparser.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/tinyxml/tinyxmlparser.cpp.s
-.PHONY : tinyxml/tinyxmlparser.cpp.s
-
 # Help Target
 help:
 	@echo The following are some of the valid targets for this Makefile:
@@ -341,18 +245,6 @@ help:
 	@echo ... pugixml/pugixml.obj
 	@echo ... pugixml/pugixml.i
 	@echo ... pugixml/pugixml.s
-	@echo ... tinyxml/tinystr.obj
-	@echo ... tinyxml/tinystr.i
-	@echo ... tinyxml/tinystr.s
-	@echo ... tinyxml/tinyxml.obj
-	@echo ... tinyxml/tinyxml.i
-	@echo ... tinyxml/tinyxml.s
-	@echo ... tinyxml/tinyxmlerror.obj
-	@echo ... tinyxml/tinyxmlerror.i
-	@echo ... tinyxml/tinyxmlerror.s
-	@echo ... tinyxml/tinyxmlparser.obj
-	@echo ... tinyxml/tinyxmlparser.i
-	@echo ... tinyxml/tinyxmlparser.s
 .PHONY : help
 
 

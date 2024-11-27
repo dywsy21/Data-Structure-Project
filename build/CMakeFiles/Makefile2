@@ -84,12 +84,12 @@ clean: CMakeFiles/backend.dir/clean
 CMakeFiles/backend.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" --progress-num=1,2,3,4,5,6,7,8,9 "Built target backend"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" --progress-num=1,2,3,4,5 "Built target backend"
 .PHONY : CMakeFiles/backend.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/backend.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 CMakeFiles/backend.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "E:\BaiduSyncdisk\Code Projects\PyQt Projects\Data Structure Project\build\CMakeFiles" 0
 .PHONY : CMakeFiles/backend.dir/rule

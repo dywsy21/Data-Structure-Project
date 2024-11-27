@@ -12,6 +12,7 @@
 #include <fstream>
 #include "k-dtree.h"
 #include <string.h>
+#include "defs.h"
 
 extern std::vector<uint64_t> index_to_node_id;
 
@@ -66,7 +67,7 @@ bool load_graph(const std::string& filepath,
             double lon = elem.attribute("lon").as_double();
             node_id_to_index[id] = index;
             index_to_node_id.push_back(id);
-            kd_tree.insert({lat, lon});
+            kd_tree.insert({lat, lon}, index); // Pass index here
             ++index;
         } else if (strcmp(name, "way") == 0) {
             std::vector<uint64_t> node_refs;
@@ -166,11 +167,24 @@ std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t e
     distances[start] = 0.0;
     queue.emplace(0.0, start);
 
+    #ifdef DEBUG
+    std::cout << "[DEBUG] Starting Dijkstra's algorithm from node " << start << " to node " << end << std::endl;
+    #endif
+
     while (!queue.empty()) {
         auto [dist, current] = queue.top();
         queue.pop();
 
-        if (current == end) break;
+        #ifdef DEBUG
+        std::cout << "[DEBUG] Visiting node " << current << " with current distance " << dist << std::endl;
+        #endif
+
+        if (current == end) {
+            #ifdef DEBUG
+            std::cout << "[DEBUG] Reached the destination node " << end << std::endl;
+            #endif
+            break;
+        }
 
         if (dist > distances[current]) continue;
 
@@ -182,40 +196,66 @@ std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t e
             uint64_t neighbor_id = index_to_node_id[neighbor];
 
             // Check whitelist
-            if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
+            if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport)) {
+                #ifdef DEBUG
+                std::cout << "[DEBUG] Node " << neighbor << " is not allowed based on the whitelist" << std::endl;
+                #endif
                 continue;
+            }
+
+            #ifdef DEBUG
+            std::cout << "[DEBUG] Checking neighbor node " << neighbor << " with edge weight " << edge.second << std::endl;
+            #endif
 
             if (new_dist < distances[neighbor]) {
                 distances[neighbor] = new_dist;
                 previous[neighbor] = current;
                 queue.emplace(new_dist, neighbor);
+                #ifdef DEBUG
+                std::cout << "[DEBUG] Updated distance for node " << neighbor << " to " << new_dist << std::endl;
+                #endif
             }
         }
     }
 
     // Reconstruct path
     std::vector<uint32_t> path;
-    if (distances[end] == std::numeric_limits<double>::infinity())
+    if (distances[end] == std::numeric_limits<double>::infinity()) {
+        #ifdef DEBUG
+        std::cout << "[DEBUG] No path found to node " << end << std::endl;
+        #endif
         return path; // No path found
+    }
 
     for (uint32_t at = end; at != start; at = previous[at]) {
         path.push_back(at);
-        if (previous[at] == static_cast<uint32_t>(-1))
+        if (previous[at] == static_cast<uint32_t>(-1)) {
+            #ifdef DEBUG
+            std::cout << "[DEBUG] No path found during reconstruction" << std::endl;
+            #endif
             return std::vector<uint32_t>(); // No path found
+        }
     }
     path.push_back(start);
     std::reverse(path.begin(), path.end());
+
+    #ifdef DEBUG
+    std::cout << "[DEBUG] Path found: ";
+    for (uint32_t node : path) {
+        std::cout << node << " ";
+    }
+    std::cout << std::endl;
+    #endif
+
     return path;
 }
 
 // Function to find the shortest path using Bidirectional A* algorithm
-std::vector<uint32_t> a_star(const KdTree& kd_tree,
-                             uint32_t start_idx,
-                             uint32_t end_idx,
-                             const std::vector<std::pair<double, double>>& node_coords,
+std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end,
+                             const std::vector<std::pair<double, double>>& coords,
                              const std::unordered_map<uint64_t, std::string>& node_tags,
                              bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    auto heuristic = [&node_coords](uint32_t a, uint32_t b) {
+    auto heuristic = [&coords](uint32_t a, uint32_t b) {
         // Implement a heuristic function here, for simplicity, we use 0 (equivalent to Dijkstra)
         return 0.0f;
     };
@@ -227,10 +267,10 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
     std::vector<uint32_t> came_from_start(kd_tree.size(), -1);
     std::vector<uint32_t> came_from_end(kd_tree.size(), -1);
 
-    g_score_start[start_idx] = 0.0f;
-    f_score_start[start_idx] = heuristic(start_idx, end_idx);
-    g_score_end[end_idx] = 0.0f;
-    f_score_end[end_idx] = heuristic(end_idx, start_idx);
+    g_score_start[start] = 0.0f;
+    f_score_start[start] = heuristic(start, end);
+    g_score_end[end] = 0.0f;
+    f_score_end[end] = heuristic(end, start);
 
     auto cmp_start = [&f_score_start](uint32_t a, uint32_t b) {
         return f_score_start[a] > f_score_start[b];
@@ -242,8 +282,8 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
     std::priority_queue<uint32_t, std::vector<uint32_t>, decltype(cmp_start)> open_set_start(cmp_start);
     std::priority_queue<uint32_t, std::vector<uint32_t>, decltype(cmp_end)> open_set_end(cmp_end);
 
-    open_set_start.push(start_idx);
-    open_set_end.push(end_idx);
+    open_set_start.push(start);
+    open_set_end.push(end);
 
     std::unordered_set<uint32_t> closed_set_start, closed_set_end;
 
@@ -257,15 +297,15 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
             // Path found
             std::vector<uint32_t> path;
             uint32_t u = current_start;
-            while (u != start_idx) {
+            while (u != start) {
                 path.push_back(u);
                 u = came_from_start[u];
             }
-            path.push_back(start_idx);
+            path.push_back(start);
             std::reverse(path.begin(), path.end());
 
             u = current_start;
-            while (u != end_idx) {
+            while (u != end) {
                 u = came_from_end[u];
                 path.push_back(u);
             }
@@ -288,7 +328,7 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
             if (tentative_g_score < g_score_start[edge.first]) {
                 came_from_start[edge.first] = current_start;
                 g_score_start[edge.first] = tentative_g_score;
-                f_score_start[edge.first] = g_score_start[edge.first] + heuristic(edge.first, end_idx);
+                f_score_start[edge.first] = g_score_start[edge.first] + heuristic(edge.first, end);
                 open_set_start.push(edge.first);
             }
         }
@@ -302,15 +342,15 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
             // Path found
             std::vector<uint32_t> path;
             uint32_t u = current_end;
-            while (u != end_idx) {
+            while (u != end) {
                 path.push_back(u);
                 u = came_from_end[u];
             }
-            path.push_back(end_idx);
+            path.push_back(end);
             std::reverse(path.begin(), path.end());
 
             u = current_end;
-            while (u != start_idx) {
+            while (u != start) {
                 u = came_from_start[u];
                 path.push_back(u);
             }
@@ -333,7 +373,7 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
             if (tentative_g_score < g_score_end[edge.first]) {
                 came_from_end[edge.first] = current_end;
                 g_score_end[edge.first] = tentative_g_score;
-                f_score_end[edge.first] = g_score_end[edge.first] + heuristic(edge.first, start_idx);
+                f_score_end[edge.first] = g_score_end[edge.first] + heuristic(edge.first, start);
                 open_set_end.push(edge.first);
             }
         }
@@ -343,15 +383,13 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree,
 }
 
 // Function to find the shortest path using Bellman-Ford algorithm
-std::vector<uint32_t> bellman_ford(const KdTree& kd_tree,
-                                   uint32_t start_idx,
-                                   uint32_t end_idx,
+std::vector<uint32_t> bellman_ford(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                    const std::unordered_map<uint64_t, std::string>& node_tags,
                                    bool pedestrian, bool riding, bool driving, bool pubTransport) {
     std::vector<float> distances(kd_tree.size(), std::numeric_limits<float>::infinity());
     std::vector<uint32_t> previous(kd_tree.size(), -1);
 
-    distances[start_idx] = 0.0f;
+    distances[start] = 0.0f;
 
     int cur_progress = 0;
 
@@ -379,13 +417,13 @@ std::vector<uint32_t> bellman_ford(const KdTree& kd_tree,
 
     // Reconstruct path
     std::vector<uint32_t> path;
-    uint32_t u = end_idx;
-    if (previous[u] != -1 || u == start_idx) {
-        while (u != start_idx) {
+    uint32_t u = end;
+    if (previous[u] != -1 || u == start) {
+        while (u != start) {
             path.push_back(u);
             u = previous[u];
         }
-        path.push_back(start_idx);
+        path.push_back(start);
         std::reverse(path.begin(), path.end());
     }
 
@@ -393,9 +431,7 @@ std::vector<uint32_t> bellman_ford(const KdTree& kd_tree,
 }
 
 // Function to find the shortest path using Floyd-Warshall algorithm
-std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree,
-                                     uint32_t start_idx,
-                                     uint32_t end_idx,
+std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                      const std::unordered_map<uint64_t, std::string>& node_tags,
                                      bool pedestrian, bool riding, bool driving, bool pubTransport) {
     std::vector<std::vector<float>> dist(kd_tree.size(), std::vector<float>(kd_tree.size(), std::numeric_limits<float>::infinity()));
@@ -440,14 +476,38 @@ std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree,
 
     // Reconstruct path
     std::vector<uint32_t> path;
-    if (next[start_idx][end_idx] != -1) {
-        uint32_t u = start_idx;
-        while (u != end_idx) {
+    if (next[start][end] != -1) {
+        uint32_t u = start;
+        while (u != end) {
             path.push_back(u);
-            u = next[u][end_idx];
+            u = next[u][end];
         }
-        path.push_back(end_idx);
+        path.push_back(end);
     }
 
     return path;
+}
+
+uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
+                             const std::unordered_map<uint64_t, std::string>& node_tags,
+                             bool pedestrian, bool riding, bool driving, bool pubTransport) {
+    std::vector<double> point = {lat, lon};
+    int k = 1;
+
+    while (true) {
+        std::vector<std::vector<double>> nearest_points = kd_tree.findKthNearestNeighbors(point, k);
+        for (const auto& nearest_point : nearest_points) {
+            auto it = std::find(kd_tree.points.begin(), kd_tree.points.end(), nearest_point);
+            if (it != kd_tree.points.end()) {
+                size_t index = std::distance(kd_tree.points.begin(), it);
+                uint64_t node_id = index_to_node_id[index];
+                if (is_node_allowed(node_id, node_tags, pedestrian, riding, driving, pubTransport)) {
+                    return node_id;
+                }
+            }
+        }
+        k++;
+    }
+
+    return 0; // Return 0 if no nearest node is found
 }

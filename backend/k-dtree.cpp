@@ -1,4 +1,5 @@
 #include "k-dtree.h"
+#include "defs.h"
 #include <algorithm>
 #include <cmath>
 
@@ -6,9 +7,9 @@ KdTree::KdTree(int k) : k(k), root(nullptr), tree_size(0) {}
 
 KdTree::~KdTree() {}
 
-void KdTree::insert(const std::vector<double>& point) {
+void KdTree::insert(const std::vector<double>& point, uint32_t index) {
     points.push_back(point);
-    root = insertRec(std::move(root), point, 0);
+    root = insertRec(std::move(root), point, index, 0);
     ++tree_size;
 }
 
@@ -32,24 +33,57 @@ std::vector<double> KdTree::findNearestNeighbor(const std::vector<double>& point
     return best ? best->point : std::vector<double>();
 }
 
-void KdTree::insertEdge(uint32_t from, uint32_t to, double weight) {
-    Node* node = root.get();
-    while (node) {
-        if (node->point[0] == from) {
-            node->edges.emplace_back(to, weight);
-            return;
-        }
-        node = (from < node->point[0]) ? node->left.get() : node->right.get();
+std::vector<std::vector<double>> KdTree::findKthNearestNeighbors(const std::vector<double>& point, int k) const {
+    std::priority_queue<std::pair<double, const Node*>> max_heap;
+    findKthNearestNeighborsRec(root.get(), point, 0, k, max_heap);
+
+    std::vector<std::vector<double>> result;
+    while (!max_heap.empty()) {
+        result.push_back(max_heap.top().second->point);
+        max_heap.pop();
+    }
+    std::reverse(result.begin(), result.end());
+    return result;
+}
+
+void KdTree::findKthNearestNeighborsRec(const Node* node, const std::vector<double>& point, int depth, int k,
+                                        std::priority_queue<std::pair<double, const Node*>>& max_heap) const {
+    if (!node) return;
+
+    double dist = 0;
+    for (int i = 0; i < k; ++i) {
+        dist += (node->point[i] - point[i]) * (node->point[i] - point[i]);
+    }
+
+    if (max_heap.size() < k) {
+        max_heap.emplace(dist, node);
+    } else if (dist < max_heap.top().first) {
+        max_heap.pop();
+        max_heap.emplace(dist, node);
+    }
+
+    int cd = depth % k;
+    const Node* nextNode = point[cd] < node->point[cd] ? node->left.get() : node->right.get();
+    const Node* otherNode = point[cd] < node->point[cd] ? node->right.get() : node->left.get();
+
+    findKthNearestNeighborsRec(nextNode, point, depth + 1, k, max_heap);
+
+    if ((point[cd] - node->point[cd]) * (point[cd] - node->point[cd]) < max_heap.top().first) {
+        findKthNearestNeighborsRec(otherNode, point, depth + 1, k, max_heap);
     }
 }
 
-const std::vector<std::pair<uint32_t, double>>& KdTree::getEdges(uint32_t node) const {
-    const Node* current = root.get();
-    while (current) {
-        if (current->point[0] == node) {
-            return current->edges;
-        }
-        current = (node < current->point[0]) ? current->left.get() : current->right.get();
+void KdTree::insertEdge(uint32_t from, uint32_t to, double weight) {
+    auto it = index_to_node.find(from);
+    if (it != index_to_node.end()) {
+        it->second->edges.emplace_back(to, weight);
+    }
+}
+
+const std::vector<std::pair<uint32_t, double>>& KdTree::getEdges(uint32_t node_index) const {
+    auto it = index_to_node.find(node_index);
+    if (it != index_to_node.end()) {
+        return it->second->edges;
     }
     static const std::vector<std::pair<uint32_t, double>> empty;
     return empty;
@@ -67,14 +101,17 @@ const std::vector<double>& KdTree::getPoint(uint32_t index) const {
     return points[index];
 }
 
-std::unique_ptr<KdTree::Node> KdTree::insertRec(std::unique_ptr<Node> node, const std::vector<double>& point, int depth) {
-    if (!node) return std::make_unique<Node>(point);
-
+std::unique_ptr<KdTree::Node> KdTree::insertRec(std::unique_ptr<Node> node, const std::vector<double>& point, uint32_t index, int depth) {
+    if (!node) {
+        auto new_node = std::make_unique<Node>(point, index);
+        index_to_node[index] = new_node.get(); // Store mapping
+        return new_node;
+    }
     int cd = depth % k;
     if (point[cd] < node->point[cd]) {
-        node->left = insertRec(std::move(node->left), point, depth + 1);
+        node->left = insertRec(std::move(node->left), point, index, depth + 1);
     } else {
-        node->right = insertRec(std::move(node->right), point, depth + 1);
+        node->right = insertRec(std::move(node->right), point, index, depth + 1);
     }
     return node;
 }
