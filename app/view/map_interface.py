@@ -39,6 +39,8 @@ class MapInterface(QWidget):
         self.custom_tile_layer_ids = []  # Store layer IDs instead of layer objects
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)  # Add this line
         self.currentLayerType = "default"  # Store the current layer type
+
+        signalBus.backendOutputReceived.connect(self.handle_backend_output)  # Connect the signal to the handler
         
         self.initUI()
 
@@ -581,3 +583,6 @@ class MapInterface(QWidget):
     
     # # ...existing code...
 
+    def handle_backend_output(self, output):
+        print(output)
+        

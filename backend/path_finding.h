@@ -6,6 +6,7 @@
 #include <utility>
 #include <cstdint>
 #include <string>
+#include "k-dtree.h"
 
 extern std::vector<uint64_t> index_to_node_id;
 
@@ -35,11 +36,9 @@ std::vector<uint32_t> floyd_warshall(const std::vector<std::vector<Edge>>& graph
 
 // Declaration of load_graph function
 bool load_graph(const std::string& filepath,
-                std::vector<std::vector<Edge>>& graph,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
-                std::vector<uint64_t>& index_to_node_id,
-                std::unordered_map<uint64_t, std::pair<double, double>>& node_coords_map,
                 std::unordered_map<uint64_t, std::string>& node_tags,
-                bool pedestrian, bool riding, bool driving, bool pubTransport);
+                bool pedestrian, bool riding, bool driving, bool pubTransport,
+                KdTree& kd_tree);
 
 #endif // PATH_FINDING_H

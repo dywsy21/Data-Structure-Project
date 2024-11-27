@@ -128,6 +128,30 @@ backend/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/build
 .PHONY : backend/fast
 
+k-dtree.obj: k-dtree.cpp.obj
+.PHONY : k-dtree.obj
+
+# target to build an object file
+k-dtree.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/k-dtree.cpp.obj
+.PHONY : k-dtree.cpp.obj
+
+k-dtree.i: k-dtree.cpp.i
+.PHONY : k-dtree.i
+
+# target to preprocess a source file
+k-dtree.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/k-dtree.cpp.i
+.PHONY : k-dtree.cpp.i
+
+k-dtree.s: k-dtree.cpp.s
+.PHONY : k-dtree.s
+
+# target to generate assembly for a file
+k-dtree.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/k-dtree.cpp.s
+.PHONY : k-dtree.cpp.s
+
 main.obj: main.cpp.obj
 .PHONY : main.obj
 
@@ -175,6 +199,30 @@ path_finding.s: path_finding.cpp.s
 path_finding.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/path_finding.cpp.s
 .PHONY : path_finding.cpp.s
+
+pugixml/pugixml.obj: pugixml/pugixml.cpp.obj
+.PHONY : pugixml/pugixml.obj
+
+# target to build an object file
+pugixml/pugixml.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/pugixml/pugixml.cpp.obj
+.PHONY : pugixml/pugixml.cpp.obj
+
+pugixml/pugixml.i: pugixml/pugixml.cpp.i
+.PHONY : pugixml/pugixml.i
+
+# target to preprocess a source file
+pugixml/pugixml.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/pugixml/pugixml.cpp.i
+.PHONY : pugixml/pugixml.cpp.i
+
+pugixml/pugixml.s: pugixml/pugixml.cpp.s
+.PHONY : pugixml/pugixml.s
+
+# target to generate assembly for a file
+pugixml/pugixml.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\backend.dir\build.make CMakeFiles/backend.dir/pugixml/pugixml.cpp.s
+.PHONY : pugixml/pugixml.cpp.s
 
 tinyxml/tinystr.obj: tinyxml/tinystr.cpp.obj
 .PHONY : tinyxml/tinystr.obj
@@ -281,12 +329,18 @@ help:
 	@echo ... edit_cache
 	@echo ... rebuild_cache
 	@echo ... backend
+	@echo ... k-dtree.obj
+	@echo ... k-dtree.i
+	@echo ... k-dtree.s
 	@echo ... main.obj
 	@echo ... main.i
 	@echo ... main.s
 	@echo ... path_finding.obj
 	@echo ... path_finding.i
 	@echo ... path_finding.s
+	@echo ... pugixml/pugixml.obj
+	@echo ... pugixml/pugixml.i
+	@echo ... pugixml/pugixml.s
 	@echo ... tinyxml/tinystr.obj
 	@echo ... tinyxml/tinystr.i
 	@echo ... tinyxml/tinystr.s

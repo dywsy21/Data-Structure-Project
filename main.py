@@ -55,16 +55,6 @@ class Application(QApplication):
 
         # Connect the sendBackendRequest signal to the handler
         signalBus.sendBackendRequest.connect(self.handle_send_backend_request)
-
-        # self.renderer_process = QProcess()
-        # renderer_path = r"build\renderer.exe"
-        # self.renderer_process.setProgram(renderer_path)
-        # self.renderer_process.setArguments([])
-        # self.renderer_process.readyReadStandardOutput.connect(self.handle_renderer_output)
-        # self.renderer_process.readyReadStandardError.connect(self.handle_renderer_error)
-        # self.renderer_process.started.connect(self.on_renderer_started)
-        # self.renderer_process.errorOccurred.connect(self.handle_renderer_error_occurred)
-        # self.renderer_process.start()
         
     def handle_backend_output(self):
         output = self.backend_process.readAllStandardOutput().data().decode()

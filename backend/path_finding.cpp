@@ -1,8 +1,5 @@
 #include "path_finding.h"
-#include "tinyxml/tinyxml.h" // Ensure the path is correct
-#include "sqlite3.h"
-#include "utils.h"
-
+#include "pugixml/pugixml.hpp" // Include pugixml header
 #include <iostream>
 #include <sstream> // Include this header for std::istringstream
 #include <queue>
@@ -13,106 +10,155 @@
 #include <map>
 #include <unordered_map>
 #include <fstream>
-
-// Use memory pools for Edge allocations
-class EdgeAllocator {
-public:
-    // Custom allocator implementation
-    // ...code to manage memory allocations for Edge structs...
-};
+#include "k-dtree.h"
+#include <string.h>
 
 extern std::vector<uint64_t> index_to_node_id;
 
 // Function to load the graph from an XML file
 bool load_graph(const std::string& filepath,
-                std::vector<std::vector<Edge>>& graph,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
-                std::vector<uint64_t>& index_to_node_id,
-                std::unordered_map<uint64_t, std::pair<double, double>>& node_coords_map,
                 std::unordered_map<uint64_t, std::string>& node_tags,
-                bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    TiXmlDocument doc(filepath.c_str());
-    if (!doc.LoadFile()) {
+                bool pedestrian, bool riding, bool driving, bool pubTransport,
+                KdTree& kd_tree) {
+    pugi::xml_document doc;
+    pugi::xml_parse_result result = doc.load_file(filepath.c_str());
+    if (!result) {
         std::cerr << "Failed to load file: " << filepath << std::endl;
         return false;
     }
 
-    TiXmlElement* root = doc.RootElement();
+    pugi::xml_node root = doc.child("osm");
     if (!root) {
         std::cerr << "Invalid XML format: No root element." << std::endl;
         return false;
     }
 
-    // Iterate through XML elements
+    // First pass: Estimate counts to reserve space
+    size_t node_count = 0;
+    size_t way_count = 0;
+    for (pugi::xml_node elem = root.first_child(); elem; elem = elem.next_sibling()) {
+        const char* name = elem.name();
+        if (strcmp(name, "node") == 0) {
+            ++node_count;
+        } else if (strcmp(name, "way") == 0) {
+            ++way_count;
+        }
+    }
+
+    // Reserve space to avoid reallocations
+    index_to_node_id.reserve(node_count);
+    node_id_to_index.reserve(node_count);
+    kd_tree.reserve(node_count);
+    node_tags.reserve(node_count);
+
+    // Second pass: Parse nodes and ways
     uint32_t index = 0;
-    for (TiXmlElement* elem = root->FirstChildElement(); elem != nullptr; elem = elem->NextSiblingElement()) {
-        if (std::string(elem->Value()) == "node") {
-            uint64_t id = std::stoull(elem->Attribute("id"));
-            double lat = std::stod(elem->Attribute("lat"));
-            double lon = std::stod(elem->Attribute("lon"));
+    size_t processed_elements = 0;
+    size_t total_elements = node_count + way_count;
+    int last_progress = -1;
+
+    for (pugi::xml_node elem = root.first_child(); elem; elem = elem.next_sibling()) {
+        const char* name = elem.name();
+        if (strcmp(name, "node") == 0) {
+            uint64_t id = elem.attribute("id").as_ullong();
+            double lat = elem.attribute("lat").as_double();
+            double lon = elem.attribute("lon").as_double();
             node_id_to_index[id] = index;
             index_to_node_id.push_back(id);
-            node_coords_map[id] = {lat, lon};
-            graph.emplace_back(); // Initialize adjacency list
+            kd_tree.insert({lat, lon});
             ++index;
-        } else if (std::string(elem->Value()) == "way") {
-            // Parse way elements and populate graph accordingly
-            uint64_t way_id = std::stoull(elem->Attribute("id"));
+        } else if (strcmp(name, "way") == 0) {
             std::vector<uint64_t> node_refs;
-            TiXmlElement* nd = elem->FirstChildElement("nd");
-            while (nd) {
-                uint64_t ref = std::stoull(nd->Attribute("ref"));
+            for (pugi::xml_node nd = elem.child("nd"); nd; nd = nd.next_sibling("nd")) {
+                uint64_t ref = nd.attribute("ref").as_ullong();
                 node_refs.push_back(ref);
-                nd = nd->NextSiblingElement("nd");
             }
 
             // Add edges between consecutive nodes
             for (size_t i = 0; i < node_refs.size() - 1; ++i) {
                 uint64_t from_id = node_refs[i];
                 uint64_t to_id = node_refs[i + 1];
-                if (node_id_to_index.find(from_id) != node_id_to_index.end() &&
-                    node_id_to_index.find(to_id) != node_id_to_index.end()) {
-                    uint32_t from_idx = node_id_to_index[from_id];
-                    uint32_t to_idx = node_id_to_index[to_id];
-                    // For simplicity, assume weight as Euclidean distance
-                    double lat1 = node_coords_map[from_id].first;
-                    double lon1 = node_coords_map[from_id].second;
-                    double lat2 = node_coords_map[to_id].first;
-                    double lon2 = node_coords_map[to_id].second;
-                    double distance = std::sqrt(std::pow(lat2 - lat1, 2) + std::pow(lon2 - lon1, 2));
-                    graph[from_idx].push_back(Edge{to_idx, distance});
-                    graph[to_idx].push_back(Edge{from_idx, distance}); // Assuming undirected graph
+                auto from_it = node_id_to_index.find(from_id);
+                auto to_it = node_id_to_index.find(to_id);
+                if (from_it != node_id_to_index.end() && to_it != node_id_to_index.end()) {
+                    uint32_t from_idx = from_it->second;
+                    uint32_t to_idx = to_it->second;
+                    // Use precomputed coordinates
+                    std::vector<double> from_coords = kd_tree.getPoint(from_idx);
+                    std::vector<double> to_coords = kd_tree.getPoint(to_idx);
+                    double distance = std::hypot(to_coords[0] - from_coords[0], to_coords[1] - from_coords[1]);
+                    kd_tree.insertEdge(from_idx, to_idx, distance);
+                    kd_tree.insertEdge(to_idx, from_idx, distance); // Assuming undirected graph
                 }
             }
 
             // Handle tags for ways
-            TiXmlElement* tag = elem->FirstChildElement("tag");
-            while (tag) {
-                std::string key = tag->Attribute("k");
-                std::string value = tag->Attribute("v");
-                if (key == "highway") {
+            for (pugi::xml_node tag = elem.child("tag"); tag; tag = tag.next_sibling("tag")) {
+                const char* key = tag.attribute("k").value();
+                if (strcmp(key, "highway") == 0) {
+                    const char* value = tag.attribute("v").value();
                     for (uint64_t node_id : node_refs) {
                         node_tags[node_id] = value;
                     }
+                    break; // Assuming one highway tag per way
                 }
-                tag = tag->NextSiblingElement("tag");
             }
         }
-        // Handle other element types if necessary
+
+        // Update progress
+        ++processed_elements;
+        int progress = static_cast<int>((processed_elements * 100.0) / total_elements);
+        if(last_progress != progress)
+        {
+            last_progress = progress;
+            std::cout << "\rLoading graph: " << progress << "%";
+            std::cout.flush();
+        }
     }
+
+    std::cout << std::endl; // Move to the next line after progress is complete
 
     // Further processing if needed, such as filtering based on node_tags and whitelist flags
 
     return true;
 }
 
+// Helper function to determine if a node is allowed based on whitelist
+bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::string>& node_tags,
+                    bool pedestrian, bool riding, bool driving, bool pubTransport) {
+    auto it = node_tags.find(node_id);
+    if (it == node_tags.end()) return false;
+
+    const std::string& highway_type = it->second;
+
+    if (pedestrian && (highway_type == "pedestrian" || highway_type == "footway" ||
+                      highway_type == "steps" || highway_type == "path" ||
+                      highway_type == "living_street"))
+        return true;
+    if (riding && (highway_type == "cycleway" || highway_type == "path" ||
+                  highway_type == "track"))
+        return true;
+    if (driving && (highway_type == "motorway" || highway_type == "trunk" ||
+                   highway_type == "primary" || highway_type == "secondary" ||
+                   highway_type == "tertiary" || highway_type == "service" ||
+                   highway_type == "motorway_link" || highway_type == "trunk_link" ||
+                   highway_type == "primary_link" || highway_type == "secondary_link" ||
+                   highway_type == "residential"))
+        return true;
+    if (pubTransport && (highway_type == "bus_stop" || highway_type == "motorway_junction" ||
+                        highway_type == "traffic_signals" || highway_type == "crossing"))
+        return true;
+
+    return false;
+}
 
 // Function to find the shortest path using Dijkstra's algorithm
-std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph, uint32_t start, uint32_t end,
+std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                const std::unordered_map<uint64_t, std::string>& node_tags,
                                bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    std::vector<double> distances(graph.size(), std::numeric_limits<double>::infinity());
-    std::vector<uint32_t> previous(graph.size(), -1);
+    std::vector<double> distances(kd_tree.size(), std::numeric_limits<double>::infinity());
+    std::vector<uint32_t> previous(kd_tree.size(), -1);
     std::priority_queue<std::pair<double, uint32_t>,
                         std::vector<std::pair<double, uint32_t>>,
                         std::greater<std::pair<double, uint32_t>>> queue;
@@ -128,14 +174,13 @@ std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph, uint
 
         if (dist > distances[current]) continue;
 
-        for (const auto& edge : graph[current]) {
-            uint32_t neighbor = edge.to;
-            double new_dist = dist + edge.weight;
+        for (const auto& edge : kd_tree.getEdges(current)) {
+            uint32_t neighbor = edge.first;
+            double new_dist = dist + edge.second;
 
             // Get node_id from index_to_node_id
             uint64_t neighbor_id = index_to_node_id[neighbor];
 
-            // std::cout << "Before check" << std::endl;
             // Check whitelist
             if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                 continue;
@@ -164,7 +209,7 @@ std::vector<uint32_t> dijkstra(const std::vector<std::vector<Edge>>& graph, uint
 }
 
 // Function to find the shortest path using Bidirectional A* algorithm
-std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
+std::vector<uint32_t> a_star(const KdTree& kd_tree,
                              uint32_t start_idx,
                              uint32_t end_idx,
                              const std::vector<std::pair<double, double>>& node_coords,
@@ -175,12 +220,12 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
         return 0.0f;
     };
 
-    std::vector<float> g_score_start(graph.size(), std::numeric_limits<float>::infinity());
-    std::vector<float> g_score_end(graph.size(), std::numeric_limits<float>::infinity());
-    std::vector<float> f_score_start(graph.size(), std::numeric_limits<float>::infinity());
-    std::vector<float> f_score_end(graph.size(), std::numeric_limits<float>::infinity());
-    std::vector<uint32_t> came_from_start(graph.size(), -1);
-    std::vector<uint32_t> came_from_end(graph.size(), -1);
+    std::vector<float> g_score_start(kd_tree.size(), std::numeric_limits<float>::infinity());
+    std::vector<float> g_score_end(kd_tree.size(), std::numeric_limits<float>::infinity());
+    std::vector<float> f_score_start(kd_tree.size(), std::numeric_limits<float>::infinity());
+    std::vector<float> f_score_end(kd_tree.size(), std::numeric_limits<float>::infinity());
+    std::vector<uint32_t> came_from_start(kd_tree.size(), -1);
+    std::vector<uint32_t> came_from_end(kd_tree.size(), -1);
 
     g_score_start[start_idx] = 0.0f;
     f_score_start[start_idx] = heuristic(start_idx, end_idx);
@@ -228,23 +273,23 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
             return path;
         }
 
-        for (const auto& edge : graph[current_start]) {
-            if (closed_set_start.find(edge.to) != closed_set_start.end()) continue;
+        for (const auto& edge : kd_tree.getEdges(current_start)) {
+            if (closed_set_start.find(edge.first) != closed_set_start.end()) continue;
 
-            float tentative_g_score = g_score_start[current_start] + edge.weight;
+            float tentative_g_score = g_score_start[current_start] + edge.second;
 
             // Get node_id from index_to_node_id
-            uint64_t neighbor_id = index_to_node_id[edge.to];
+            uint64_t neighbor_id = index_to_node_id[edge.first];
 
             // Check whitelist
             if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                 continue;
 
-            if (tentative_g_score < g_score_start[edge.to]) {
-                came_from_start[edge.to] = current_start;
-                g_score_start[edge.to] = tentative_g_score;
-                f_score_start[edge.to] = g_score_start[edge.to] + heuristic(edge.to, end_idx);
-                open_set_start.push(edge.to);
+            if (tentative_g_score < g_score_start[edge.first]) {
+                came_from_start[edge.first] = current_start;
+                g_score_start[edge.first] = tentative_g_score;
+                f_score_start[edge.first] = g_score_start[edge.first] + heuristic(edge.first, end_idx);
+                open_set_start.push(edge.first);
             }
         }
 
@@ -273,23 +318,23 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
             return path;
         }
 
-        for (const auto& edge : graph[current_end]) {
-            if (closed_set_end.find(edge.to) != closed_set_end.end()) continue;
+        for (const auto& edge : kd_tree.getEdges(current_end)) {
+            if (closed_set_end.find(edge.first) != closed_set_end.end()) continue;
 
-            float tentative_g_score = g_score_end[current_end] + edge.weight;
+            float tentative_g_score = g_score_end[current_end] + edge.second;
 
             // Get node_id from index_to_node_id
-            uint64_t neighbor_id = index_to_node_id[edge.to];
+            uint64_t neighbor_id = index_to_node_id[edge.first];
 
             // Check whitelist
             if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                 continue;
 
-            if (tentative_g_score < g_score_end[edge.to]) {
-                came_from_end[edge.to] = current_end;
-                g_score_end[edge.to] = tentative_g_score;
-                f_score_end[edge.to] = g_score_end[edge.to] + heuristic(edge.to, start_idx);
-                open_set_end.push(edge.to);
+            if (tentative_g_score < g_score_end[edge.first]) {
+                came_from_end[edge.first] = current_end;
+                g_score_end[edge.first] = tentative_g_score;
+                f_score_end[edge.first] = g_score_end[edge.first] + heuristic(edge.first, start_idx);
+                open_set_end.push(edge.first);
             }
         }
     }
@@ -298,34 +343,34 @@ std::vector<uint32_t> a_star(const std::vector<std::vector<Edge>>& graph,
 }
 
 // Function to find the shortest path using Bellman-Ford algorithm
-std::vector<uint32_t> bellman_ford(const std::vector<std::vector<Edge>>& graph,
+std::vector<uint32_t> bellman_ford(const KdTree& kd_tree,
                                    uint32_t start_idx,
                                    uint32_t end_idx,
                                    const std::unordered_map<uint64_t, std::string>& node_tags,
                                    bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    std::vector<float> distances(graph.size(), std::numeric_limits<float>::infinity());
-    std::vector<uint32_t> previous(graph.size(), -1);
+    std::vector<float> distances(kd_tree.size(), std::numeric_limits<float>::infinity());
+    std::vector<uint32_t> previous(kd_tree.size(), -1);
 
     distances[start_idx] = 0.0f;
 
     int cur_progress = 0;
 
-    for (size_t i = 0; i < graph.size() - 1; ++i) {
-        for (size_t u = 0; u < graph.size(); ++u) {
-            for (const auto& edge : graph[u]) {
+    for (size_t i = 0; i < kd_tree.size() - 1; ++i) {
+        for (size_t u = 0; u < kd_tree.size(); ++u) {
+            for (const auto& edge : kd_tree.getEdges(u)) {
                 // Get node_id from index_to_node_id
-                uint64_t neighbor_id = index_to_node_id[edge.to];
+                uint64_t neighbor_id = index_to_node_id[edge.first];
 
                 if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                     continue;
 
-                if (distances[u] + edge.weight < distances[edge.to]) {
-                    distances[edge.to] = distances[u] + edge.weight;
-                    previous[edge.to] = u;
+                if (distances[u] + edge.second < distances[edge.first]) {
+                    distances[edge.first] = distances[u] + edge.second;
+                    previous[edge.first] = u;
                 }
             }
         }
-        int progress = static_cast<int>((i * 100.0) / graph.size());
+        int progress = static_cast<int>((i * 100.0) / kd_tree.size());
         if (progress <= 100 && progress > cur_progress) {
             std::cout << progress << std::endl;
             cur_progress = progress;
@@ -348,35 +393,35 @@ std::vector<uint32_t> bellman_ford(const std::vector<std::vector<Edge>>& graph,
 }
 
 // Function to find the shortest path using Floyd-Warshall algorithm
-std::vector<uint32_t> floyd_warshall(const std::vector<std::vector<Edge>>& graph,
+std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree,
                                      uint32_t start_idx,
                                      uint32_t end_idx,
                                      const std::unordered_map<uint64_t, std::string>& node_tags,
                                      bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    std::vector<std::vector<float>> dist(graph.size(), std::vector<float>(graph.size(), std::numeric_limits<float>::infinity()));
-    std::vector<std::vector<uint32_t>> next(graph.size(), std::vector<uint32_t>(graph.size(), -1));
+    std::vector<std::vector<float>> dist(kd_tree.size(), std::vector<float>(kd_tree.size(), std::numeric_limits<float>::infinity()));
+    std::vector<std::vector<uint32_t>> next(kd_tree.size(), std::vector<uint32_t>(kd_tree.size(), -1));
 
-    for (size_t u = 0; u < graph.size(); ++u) {
+    for (size_t u = 0; u < kd_tree.size(); ++u) {
         dist[u][u] = 0.0f;
-        for (const auto& edge : graph[u]) {
+        for (const auto& edge : kd_tree.getEdges(u)) {
             // Get node_id from index_to_node_id
-            uint64_t neighbor_id = index_to_node_id[edge.to];
+            uint64_t neighbor_id = index_to_node_id[edge.first];
 
             if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                 continue;
 
-            dist[u][edge.to] = edge.weight;
-            next[u][edge.to] = edge.to;
+            dist[u][edge.first] = edge.second;
+            next[u][edge.first] = edge.first;
         }
     }
 
-    size_t total_nodes = graph.size();
+    size_t total_nodes = kd_tree.size();
     size_t processed_nodes = 0;
     int last_progress = 0;
 
-    for (size_t k = 0; k < graph.size(); ++k) {
-        for (size_t i = 0; i < graph.size(); ++i) {
-            for (size_t j = 0; j < graph.size(); ++j) {
+    for (size_t k = 0; k < kd_tree.size(); ++k) {
+        for (size_t i = 0; i < kd_tree.size(); ++i) {
+            for (size_t j = 0; j < kd_tree.size(); ++j) {
                 if (dist[i][k] + dist[k][j] < dist[i][j]) {
                     dist[i][j] = dist[i][k] + dist[k][j];
                     next[i][j] = next[i][k];
