@@ -5,6 +5,7 @@ import sys
 from PyQt5.QtCore import Qt, QTranslator, QProcess, pyqtSignal, QDir
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication, QCompleter
+from idna import encode
 from qfluentwidgets import FluentTranslator, InfoBar, InfoBarPosition
 
 from app.common.config import *
@@ -40,7 +41,7 @@ class Application(QApplication):
         super().__init__(argv)
         self.backend_process = QProcess()
         # Specify the absolute path to backend.exe or ensure it's in the current working directory
-        backend_path = r"build\backend.exe"
+        backend_path = "build/backend.exe"
         self.backend_process.setProgram(backend_path)
         
         # # Optionally, set the working directory
@@ -70,10 +71,8 @@ class Application(QApplication):
         # Emit the backendStarted signal via signalBus
         signalBus.backendStarted.emit()
 
-    def handle_send_backend_request(self, request, pedestrian, riding, driving, pubTransport):
-        backend_command = f"{request} {int(pedestrian)} {int(riding)} {int(driving)} {int(pubTransport)}\n"
-        print(backend_command)
-        self.backend_process.write(backend_command.encode())
+    def handle_send_backend_request(self, request):
+        self.backend_process.write(request.encode())
         self.backend_process.waitForBytesWritten()  # Ensure the data is written
 
     def handle_backend_error_occurred(self, error):

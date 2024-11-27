@@ -45,7 +45,8 @@ int main(int argc, char* argv[]) {
     int node_number;
     std::vector<std::pair<double, double>> node_coords;
     std::vector<uint64_t> node_ids;
-    std::string filepath = "../backend/data/map.osm";
+    // std::string filepath = "../backend/data/map.osm";
+    std::string filepath = "E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\map.osm";
     
     KdTree kd_tree(2); // Initialize KdTree with 2 dimensions (latitude and longitude)
     std::unordered_map<uint64_t, uint32_t> node_id_to_index;

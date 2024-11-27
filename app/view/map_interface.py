@@ -129,7 +129,7 @@ class MapInterface(QWidget):
         self.rightLayout = QVBoxLayout()
         self.showPathButton = PushButton('Show Shortest Path', self.lowerWidget)
         self.showPathButton.setMinimumSize(150, 40)  # Set minimum size
-        # self.showPathButton.clicked.connect(self.calculate_shortest_path)
+        self.showPathButton.clicked.connect(self.sendDataToBackend)
         self.resetButton = PushButton('Reset', self.lowerWidget)
         # self.resetButton.clicked.connect(self.reset)
         self.resetButton.setMinimumSize(150, 40)  # Set minimum size
@@ -530,59 +530,44 @@ class MapInterface(QWidget):
                     self.middlePoints.remove(nearest_point)
                     print(f"Removed middle point at: {nearest_point}")
 
-    # @pyqtSlot(int)
-    # def toggleLayerVisibility(self, state):
-    #     if state != Qt.Checked:
-    #         self.browser.page().runJavaScript("""
-    #             window.baseLayerGroup.eachLayer(function (layer) {
-    #                 layer.setOpacity(1);
-    #             });
-    #             window.customLayerGroup.eachLayer(function (layer) {
-    #                 layer.setOpacity(0);
-    #             });
-    #         """)
-    #     else:
-    #         self.browser.page().runJavaScript("""
-    #             window.baseLayerGroup.eachLayer(function (layer) {
-    #                 layer.setOpacity(0);
-    #             });
-    #             window.customLayerGroup.eachLayer(function (layer) {
-    #                 layer.setOpacity(1);
-    #             });
-    #         """)
-
     def addBaseLayerControlButton(self):
         pass
-    #     self.browser.page().runJavaScript("""
-    #         if (typeof L.easyButton === 'undefined') {
-    #             console.error('L.easyButton is not defined');
-    #             return;
-    #         }
 
-    #         var toggleBaseLayerButton = L.easyButton({
-    #             states: [{
-    #                 stateName: 'show-base',
-    #                 icon: '<span style="font-size: 16px;">🗺️</span>',
-    #                 title: 'Hide base layer',
-    #                 onClick: function(btn, map) {
-    #                     btn.state('hide-base');
-    #                     window.baseLayerGroup.hideLayer();
-    #                 }
-    #             }, {
-    #                 stateName: 'hide-base',
-    #                 icon: '<span style="font-size: 16px;">📍</span>',
-    #                 title: 'Show base layer',
-    #                 onClick: function(btn, map) {
-    #                     btn.state('show-base');
-    #                     window.baseLayerGroup.showLayer();
-    #                 }
-    #             }]
-    #         });
-    #         toggleBaseLayerButton.addTo(map);
-    #     """)
-    
-    # # ...existing code...
+    def sendDataToBackend(self):
+        if self.selectedAlgorithm is None:
+            if not self.algorithmWarningShown:
+                QMessageBox.warning(self, "Warning", "No algorithm selected, using Dijkstra as default.", QMessageBox.Ok)
+                self.algorithmWarningShown = True
+                self.selectedAlgorithm = "Dijkstra"
+
+        if len(self.selectedNodes) < 2:
+            QMessageBox.warning(self, "Warning", "Please select both start and end nodes.", QMessageBox.Ok)
+            return
+
+        start, end = self.selectedNodes
+        nodes = [start] + self.middlePoints + [end]
+
+        def distance(node1, node2):
+            return math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
+
+        sorted_nodes = [start]
+        remaining_nodes = self.middlePoints.copy()
+
+        current_node = start
+        while remaining_nodes:
+            nearest_node = min(remaining_nodes, key=lambda node: distance(current_node, node))
+            sorted_nodes.append(nearest_node)
+            remaining_nodes.remove(nearest_node)
+            current_node = nearest_node
+
+        sorted_nodes.append(end)
+
+        backend_command = f'{self.selectedAlgorithm} {1 if self.pedestrain_enabled else 0} {1 if self.riding_enabled else 0} {1 if self.driving_enabled else 0} {1 if self.pubTransport_enabled else 0} {len(sorted_nodes)}'
+        for node in sorted_nodes:
+            backend_command += f' {node[0]} {node[1]}'
+
+        print(f"Sending command to backend: {backend_command}")
+        signalBus.sendBackendRequest.emit(backend_command)
 
     def handle_backend_output(self, output):
-        print(output)
-        
+        print(output, sep=' ')
