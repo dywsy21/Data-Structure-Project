@@ -25,13 +25,13 @@ bool load_graph(const std::string& filepath,
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_file(filepath.c_str());
     if (!result) {
-        std::cerr << "Failed to load file: " << filepath << std::endl;
+        std::cout << "Failed to load file: " << filepath << std::endl;
         return false;
     }
 
     pugi::xml_node root = doc.child("osm");
     if (!root) {
-        std::cerr << "Invalid XML format: No root element." << std::endl;
+        std::cout << "Invalid XML format: No root element." << std::endl;
         return false;
     }
 
@@ -494,15 +494,19 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
     std::vector<double> point = {lat, lon};
     int k = 1;
 
-    while (true) {
+    static const int MAXK = 100;
+
+    while (k < MAXK) {
         std::vector<std::vector<double>> nearest_points = kd_tree.findKthNearestNeighbors(point, k);
         for (const auto& nearest_point : nearest_points) {
             auto it = std::find(kd_tree.points.begin(), kd_tree.points.end(), nearest_point);
             if (it != kd_tree.points.end()) {
                 size_t index = std::distance(kd_tree.points.begin(), it);
-                uint64_t node_id = index_to_node_id[index];
-                if (is_node_allowed(node_id, node_tags, pedestrian, riding, driving, pubTransport)) {
-                    return node_id;
+                if (index < index_to_node_id.size()) { // Ensure index is within bounds
+                    uint64_t node_id = index_to_node_id[index];
+                    if (is_node_allowed(node_id, node_tags, pedestrian, riding, driving, pubTransport)) {
+                        return node_id;
+                    }
                 }
             }
         }

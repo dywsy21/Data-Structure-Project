@@ -51,7 +51,7 @@ void KdTree::findKthNearestNeighborsRec(const Node* node, const std::vector<doub
     if (!node) return;
 
     double dist = 0;
-    for (int i = 0; i < k; ++i) {
+    for (int i = 0; i < this->k; ++i) { // Use this->k instead of k to ensure correct dimension
         dist += (node->point[i] - point[i]) * (node->point[i] - point[i]);
     }
 
@@ -62,7 +62,7 @@ void KdTree::findKthNearestNeighborsRec(const Node* node, const std::vector<doub
         max_heap.emplace(dist, node);
     }
 
-    int cd = depth % k;
+    int cd = depth % this->k; // Use this->k instead of k to ensure correct dimension
     const Node* nextNode = point[cd] < node->point[cd] ? node->left.get() : node->right.get();
     const Node* otherNode = point[cd] < node->point[cd] ? node->right.get() : node->left.get();
 

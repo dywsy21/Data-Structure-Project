@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     // Get database connection
     sqlite3* db = open_database_connection("../backend/data/map_for_backend.db");
     if (!db) {
-        std::cerr << "Failed to connect to database." << std::endl;
+        std::cout << "Failed to connect to database." << std::endl;
         return 1;
     }
 
@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
             } else if (algorithm == "Bellman-Ford") {
                 path_segment = bellman_ford(db, start_id, end_id, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
             } else {
-                std::cerr << "Unknown algorithm: " << algorithm << std::endl;
+                std::cout << "Unknown algorithm: " << algorithm << std::endl;
                 continue;
             }
 

@@ -26,13 +26,13 @@ extern std::vector<uint64_t> index_to_node_id;
 //                 bool pedestrian, bool riding, bool driving, bool pubTransport) {
 //     TiXmlDocument doc(filepath.c_str());
 //     if (!doc.LoadFile()) {
-//         std::cerr << "Failed to load file: " << filepath << std::endl;
+//         std::cout << "Failed to load file: " << filepath << std::endl;
 //         return false;
 //     }
 
 //     TiXmlElement* root = doc.RootElement();
 //     if (!root) {
-//         std::cerr << "Invalid XML format: No root element." << std::endl;
+//         std::cout << "Invalid XML format: No root element." << std::endl;
 //         return false;
 //     }
 
