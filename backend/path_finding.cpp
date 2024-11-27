@@ -497,8 +497,9 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
     static const int MAXK = 100;
 
     while (k < MAXK) {
-        std::vector<std::vector<double>> nearest_points = kd_tree.findKthNearestNeighbors(point, k);
-        for (const auto& nearest_point : nearest_points) {
+        std::vector<std::vector<double>> nearest_points = kd_tree.findKthNearestNeighbor(point, k);
+        if (!nearest_points.empty()) {
+            const auto& nearest_point = nearest_points.back(); // Only process the k-th nearest point
             auto it = std::find(kd_tree.points.begin(), kd_tree.points.end(), nearest_point);
             if (it != kd_tree.points.end()) {
                 size_t index = std::distance(kd_tree.points.begin(), it);

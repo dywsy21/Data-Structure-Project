@@ -33,21 +33,51 @@ std::vector<double> KdTree::findNearestNeighbor(const std::vector<double>& point
     return best ? best->point : std::vector<double>();
 }
 
-std::vector<std::vector<double>> KdTree::findKthNearestNeighbors(const std::vector<double>& point, int k) const {
+std::vector<std::vector<double>> KdTree::findKthNearestNeighbor(const std::vector<double>& point, int k) const {
+    // Check cache first
+    CacheKey cache_key{point, k};
+    auto it = cache.find(cache_key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+
     std::priority_queue<std::pair<double, const Node*>> max_heap;
-    findKthNearestNeighborsRec(root.get(), point, 0, k, max_heap);
+
+    // Check cache for k-1 nearest neighbors
+    if (k > 1) {
+        CacheKey prev_cache_key{point, k - 1};
+        auto prev_it = cache.find(prev_cache_key);
+        if (prev_it != cache.end()) {
+            const auto& prev_result = prev_it->second;
+            for (const auto& neighbor : prev_result) {
+                double dist = 0;
+                for (int i = 0; i < this->k; ++i) {
+                    dist += (neighbor[i] - point[i]) * (neighbor[i] - point[i]);
+                }
+                max_heap.emplace(dist, nullptr); // Use nullptr as we don't need the node reference here
+            }
+        }
+    }
 
     std::vector<std::vector<double>> result;
+    findKthNearestNeighborRec(root.get(), point, 0, k, max_heap);
+
     while (!max_heap.empty()) {
-        result.push_back(max_heap.top().second->point);
+        if (max_heap.top().second) {
+            result.push_back(max_heap.top().second->point);
+        }
         max_heap.pop();
     }
     std::reverse(result.begin(), result.end());
+
+    // Cache the result
+    cache[cache_key] = result;
+
     return result;
 }
 
-void KdTree::findKthNearestNeighborsRec(const Node* node, const std::vector<double>& point, int depth, int k,
-                                        std::priority_queue<std::pair<double, const Node*>>& max_heap) const {
+void KdTree::findKthNearestNeighborRec(const Node* node, const std::vector<double>& point, int depth, int k,
+                                       std::priority_queue<std::pair<double, const Node*>>& max_heap) const {
     if (!node) return;
 
     double dist = 0;
@@ -66,10 +96,10 @@ void KdTree::findKthNearestNeighborsRec(const Node* node, const std::vector<doub
     const Node* nextNode = point[cd] < node->point[cd] ? node->left.get() : node->right.get();
     const Node* otherNode = point[cd] < node->point[cd] ? node->right.get() : node->left.get();
 
-    findKthNearestNeighborsRec(nextNode, point, depth + 1, k, max_heap);
+    findKthNearestNeighborRec(nextNode, point, depth + 1, k, max_heap);
 
     if ((point[cd] - node->point[cd]) * (point[cd] - node->point[cd]) < max_heap.top().first) {
-        findKthNearestNeighborsRec(otherNode, point, depth + 1, k, max_heap);
+        findKthNearestNeighborRec(otherNode, point, depth + 1, k, max_heap);
     }
 }
 
