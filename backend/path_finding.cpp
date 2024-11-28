@@ -38,12 +38,27 @@ bool load_graph(const std::string& filepath,
     // First pass: Estimate counts to reserve space
     size_t node_count = 0;
     size_t way_count = 0;
+    std::unordered_set<uint64_t> highway_node_ids;
     for (pugi::xml_node elem = root.first_child(); elem; elem = elem.next_sibling()) {
         const char* name = elem.name();
         if (strcmp(name, "node") == 0) {
             ++node_count;
         } else if (strcmp(name, "way") == 0) {
             ++way_count;
+            bool has_highway_tag = false;
+            for (pugi::xml_node tag = elem.child("tag"); tag; tag = tag.next_sibling("tag")) {
+                const char* key = tag.attribute("k").as_string();
+                if (strcmp(key, "highway") == 0) {
+                    has_highway_tag = true;
+                    break;
+                }
+            }
+            if (has_highway_tag) {
+                for (pugi::xml_node nd = elem.child("nd"); nd; nd = nd.next_sibling("nd")) {
+                    uint64_t ref = nd.attribute("ref").as_ullong();
+                    highway_node_ids.insert(ref);
+                }
+            }
         }
     }
 
@@ -63,12 +78,14 @@ bool load_graph(const std::string& filepath,
         const char* name = elem.name();
         if (strcmp(name, "node") == 0) {
             uint64_t id = elem.attribute("id").as_ullong();
-            double lat = elem.attribute("lat").as_double();
-            double lon = elem.attribute("lon").as_double();
-            node_id_to_index[id] = index;
-            index_to_node_id.push_back(id);
-            kd_tree.insert({lat, lon}, index); // Pass index here
-            ++index;
+            if (highway_node_ids.find(id) != highway_node_ids.end()) {
+                double lat = elem.attribute("lat").as_double();
+                double lon = elem.attribute("lon").as_double();
+                node_id_to_index[id] = index;
+                index_to_node_id.push_back(id);
+                kd_tree.insert({lat, lon}, index); // Pass index here
+                ++index;
+            }
         } else if (strcmp(name, "way") == 0) {
             std::vector<uint64_t> node_refs;
             for (pugi::xml_node nd = elem.child("nd"); nd; nd = nd.next_sibling("nd")) {
@@ -494,7 +511,7 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
     std::vector<double> point = {lat, lon};
     int k = 1;
 
-    static const int MAXK = 100;
+    static const int MAXK = 10;
 
     while (k < MAXK) {
         std::vector<std::vector<double>> nearest_points = kd_tree.findKthNearestNeighbor(point, k);
