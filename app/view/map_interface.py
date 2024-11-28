@@ -416,6 +416,7 @@ class MapInterface(QWidget):
     @pyqtSlot()
     def clearSelectedNodes(self):
         self.selectedNodes.clear()
+        self.middlePoints.clear()
         print("Cleared all selected nodes")
 
     @pyqtSlot(str, int)
