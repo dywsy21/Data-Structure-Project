@@ -136,18 +136,19 @@ class MapInterface(QWidget):
         self.rightLayout.addWidget(self.showPathButton)
         self.rightLayout.addWidget(self.resetButton)
 
-        self.progressBar = ProgressBar(self.lowerWidget)
-        self.progressBar.setMaximum(100)
-        self.progressBar.setValue(0)
-        self.progressBar.setVisible(False)
-
-        self.rightLayout.addWidget(self.progressBar)
 
         # Add a SplitPushButton to toggle layer visibility
         self.layerToggleButton = SplitPushButton("Select Map Layer", self.lowerWidget)
         self.addLayersToButton()
         self.layerToggleButton.clicked.connect(self.onLayerToggleButtonClicked)
         self.rightLayout.addWidget(self.layerToggleButton)
+
+        self.progressBar = ProgressBar(self.lowerWidget)
+        self.progressBar.setMaximum(100)
+        self.progressBar.setValue(0)
+        self.progressBar.setVisible(False)
+
+        self.rightLayout.addWidget(self.progressBar)
 
         # Add spacing between layouts
         self.lowerLayout.addLayout(self.leftLayout)
@@ -430,7 +431,7 @@ class MapInterface(QWidget):
         
         # Start a worker for each tile to fetch nodes from the database
         for tile in visible_tiles:
-            print(zoom, tile[0], tile[1])
+            # print(zoom, tile[0], tile[1])
             self.begin_rendering_tile(zoom, tile[0], tile[1])
     
     def begin_rendering_tile(self, z, x, y):
@@ -461,9 +462,9 @@ class MapInterface(QWidget):
                 print(f"Error rendering tile {z}/{x}/{y}: {stderr.decode()}")
             else:
                 if self.currentLayerType == "custom" and z <= 13:
-                    print(f"Successfully rendered tile {z}/{x}/{y}")
+                    print(f"\rSuccessfully rendered tile {z}/{x}/{y}", end="")
                 else:
-                    print(f"Successfully rendered sparse tile {z}/{x}/{y}")
+                    print(f"\rSuccessfully rendered sparse tile {z}/{x}/{y}", end="")
                 if self.currentLayerType == "custom" and z > 13:
                     # copy the tile to the custom layer
                     os.makedirs(f"renderer/cache/{z}", exist_ok=True)
@@ -571,4 +572,12 @@ class MapInterface(QWidget):
         signalBus.sendBackendRequest.emit(backend_command)
 
     def handle_backend_output(self, output):
-        print(output, sep=' ')
+        if '%' in output:
+            self.progressBar.setVisible(True)
+            value = int(output.strip('\r\n').strip('%').split(' ')[-1])
+            self.progressBar.setValue(value)
+            if value == 100:
+                self.progressBar.setVisible(False)
+            print('\r' + output, end='')
+        else:
+            print(output, sep=' ')

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <queue> // Include for priority_queue
 #include <utility> // Include for pair
+#include <iostream>
 
 class KdTree {
 public:

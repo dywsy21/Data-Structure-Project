@@ -45,6 +45,8 @@ int main(int argc, char* argv[]) {
     int node_number;
     std::vector<std::pair<double, double>> node_coords;
     std::vector<uint64_t> node_ids;
+    std::unordered_map<uint64_t, std::pair<double, double>> node_id_to_coords;
+
     // std::string filepath = "../backend/data/map.osm";
     std::string filepath = "E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\map.osm";
     
@@ -52,14 +54,21 @@ int main(int argc, char* argv[]) {
     std::unordered_map<uint64_t, uint32_t> node_id_to_index;
     std::unordered_map<uint64_t, std::string> node_tags;
 
+    index_to_node_id.clear(); // Clear any existing data
+    node_id_to_coords.clear(); // Clear any existing data
+
     auto load_start_time = std::chrono::high_resolution_clock::now();
-    if (!load_graph(filepath, node_id_to_index, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled, kd_tree)) {
+    if (!load_graph(filepath, node_id_to_index, node_tags, node_id_to_coords, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled, kd_tree)) {
         std::cout << "Failed to load graph." << std::endl;
         return -1;
     }
     auto load_end_time = std::chrono::high_resolution_clock::now();
     auto load_duration = std::chrono::duration_cast<std::chrono::milliseconds>(load_end_time - load_start_time).count();
     std::cout << "Graph loaded in " << (double)load_duration / (double)1000 << "s" << std::endl;
+
+    // for(auto [k, v]: node_id_to_coords) {
+    //     std::cout << k << " " << v.first << " " << v.second << std::endl;
+    // }
 
     while (std::cin >> algorithm >> pedestrian_enabled >> riding_enabled >> driving_enabled >> pubTransport_enabled >> node_number) { 
         try {
@@ -101,6 +110,16 @@ int main(int argc, char* argv[]) {
                 std::cout << std::endl;
             #endif
 
+            // for(auto [k, v]: node_id_to_index) {
+            //     std::cout << k << " " << v << std::endl;
+            // }
+
+            // for (auto& v: kd_tree.points) {
+            //     // set precision to 10 decimal places
+            //     std::cout.precision(10);
+            //     std::cout << v[0] << " " << v[1] << std::endl;
+            // }
+
             auto start_time = std::chrono::high_resolution_clock::now();
 
             std::vector<uint64_t> full_path;
@@ -135,8 +154,10 @@ int main(int argc, char* argv[]) {
             std::cout << "TIME " << duration << "ms" << std::endl;
 
             if (!full_path.empty()) {
-                for (uint64_t node_id : full_path) {
-                    std::cout << node_id << std::endl;
+                std::cout.precision(10); // Set precision to 10 decimal places
+                for (uint64_t node_index : full_path) {
+                    auto v = kd_tree.points[node_index];
+                    std::cout << v[0] << ' ' << v[1] << '\n';
                 }
                 std::cout << "END" << std::endl;
             } else {

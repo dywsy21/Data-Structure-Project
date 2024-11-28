@@ -9,6 +9,7 @@
 #include "k-dtree.h"
 
 extern std::vector<uint64_t> index_to_node_id;
+extern std::unordered_map<uint64_t, std::pair<double, double>> node_id_to_coords;
 
 // Define Edge structure
 struct Edge {
@@ -38,6 +39,7 @@ std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree, uint32_t start, uint
 bool load_graph(const std::string& filepath,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
                 std::unordered_map<uint64_t, std::string>& node_tags,
+                std::unordered_map<uint64_t, std::pair<double, double>>& node_id_to_coords,
                 bool pedestrian, bool riding, bool driving, bool pubTransport,
                 KdTree& kd_tree);
 

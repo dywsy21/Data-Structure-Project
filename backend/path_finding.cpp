@@ -20,6 +20,7 @@ extern std::vector<uint64_t> index_to_node_id;
 bool load_graph(const std::string& filepath,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
                 std::unordered_map<uint64_t, std::string>& node_tags,
+                std::unordered_map<uint64_t, std::pair<double, double>>& node_id_to_coords,
                 bool pedestrian, bool riding, bool driving, bool pubTransport,
                 KdTree& kd_tree) {
     pugi::xml_document doc;
@@ -63,10 +64,14 @@ bool load_graph(const std::string& filepath,
     }
 
     // Reserve space to avoid reallocations
+    index_to_node_id.clear(); // Clear any existing data
     index_to_node_id.reserve(node_count);
+    node_id_to_index.clear(); // Clear any existing data
     node_id_to_index.reserve(node_count);
     kd_tree.reserve(node_count);
+    node_tags.clear(); // Clear any existing data
     node_tags.reserve(node_count);
+    node_id_to_coords.clear(); // Clear any existing data
 
     // Second pass: Parse nodes and ways
     uint32_t index = 0;
@@ -78,14 +83,16 @@ bool load_graph(const std::string& filepath,
         const char* name = elem.name();
         if (strcmp(name, "node") == 0) {
             uint64_t id = elem.attribute("id").as_ullong();
+            double lat = elem.attribute("lat").as_double();
+            double lon = elem.attribute("lon").as_double();
             if (highway_node_ids.find(id) != highway_node_ids.end()) {
-                double lat = elem.attribute("lat").as_double();
-                double lon = elem.attribute("lon").as_double();
                 node_id_to_index[id] = index;
                 index_to_node_id.push_back(id);
                 kd_tree.insert({lat, lon}, index); // Pass index here
                 ++index;
             }
+            node_id_to_coords[id] = std::make_pair(lat, lon);
+
         } else if (strcmp(name, "way") == 0) {
             std::vector<uint64_t> node_refs;
             for (pugi::xml_node nd = elem.child("nd"); nd; nd = nd.next_sibling("nd")) {
@@ -106,6 +113,7 @@ bool load_graph(const std::string& filepath,
                     std::vector<double> from_coords = kd_tree.getPoint(from_idx);
                     std::vector<double> to_coords = kd_tree.getPoint(to_idx);
                     double distance = std::hypot(to_coords[0] - from_coords[0], to_coords[1] - from_coords[1]);
+                    
                     kd_tree.insertEdge(from_idx, to_idx, distance);
                     kd_tree.insertEdge(to_idx, from_idx, distance); // Assuming undirected graph
                 }
