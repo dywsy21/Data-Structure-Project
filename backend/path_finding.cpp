@@ -91,7 +91,7 @@ bool load_graph(const std::string& filepath,
                 kd_tree.insert({lat, lon}, index); // Pass index here
                 ++index;
             }
-            node_id_to_coords[id] = std::make_pair(lat, lon);
+            // node_id_to_coords[id] = std::make_pair(lat, lon);
 
         } else if (strcmp(name, "way") == 0) {
             std::vector<uint64_t> node_refs;
