@@ -17,5 +17,9 @@ class SignalBus(QObject):
     sendWhitelistFlags = pyqtSignal(bool, bool, bool, bool)  # Already present
     renderTile = pyqtSignal(int, int, int) # z, x, y
     finishRenderingTile = pyqtSignal(int, int, int)  # z, x, y
+    backendGraphLoaded = pyqtSignal(str)
+    backendNoPathFound = pyqtSignal()
+    backendPathFound = pyqtSignal(str)
+    backendEndOutput = pyqtSignal()
 
 signalBus = SignalBus()

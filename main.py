@@ -60,8 +60,14 @@ class Application(QApplication):
     def handle_backend_output(self):
         output = self.backend_process.readAllStandardOutput().data().decode()
         signalBus.backendOutputReceived.emit(output)
-        if "Graph loaded successfully." in output:
-            signalBus.graphLoaded.emit()  # Emit the graphLoaded signal
+        # if "Graph loaded" in output:
+        #     signalBus.backendGraphLoaded.emit(output)
+        # elif "NO PATH" in output:
+        #     signalBus.backendNoPathFound.emit()
+        # elif "TIME" in output:
+        #     signalBus.backendPathFound.emit(output)
+        # elif "END" in output:
+        #     signalBus.backendEndOutput.emit()
 
     def handle_backend_error(self):
         error = self.backend_process.readAllStandardError().data().decode()
@@ -72,7 +78,7 @@ class Application(QApplication):
         signalBus.backendStarted.emit()
 
     def handle_send_backend_request(self, request):
-        self.backend_process.write(request.encode())
+        self.backend_process.write(request.encode() + b'\n')  # Add newline character
         self.backend_process.waitForBytesWritten()  # Ensure the data is written
 
     def handle_backend_error_occurred(self, error):

@@ -18,11 +18,13 @@ import math
 from map_utils import *
 from ..common.config import *
 import concurrent.futures
+import json  # Add this import
 
 class MapInterface(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("mapInterface")
+        self.begin_collecting_output = False
         self.pedestrain_enabled = True
         self.riding_enabled = True
         self.driving_enabled = True
@@ -35,12 +37,19 @@ class MapInterface(QWidget):
         self.thread_pool = QThreadPool()
         signalBus.finishRenderingTile.connect(self.on_tiles_fetched)
         self.middlePoints = []  # Add this line
+        self.sorted_middle_points = []  # Add this line
         self.max_distance = 0.01  # Max distance limit for removing nodes
         self.custom_tile_layer_ids = []  # Store layer IDs instead of layer objects
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)  # Add this line
         self.currentLayerType = "default"  # Store the current layer type
+        self.drawnPaths = []  # Add this line to store drawn paths
+        self.backend_output_buffer = []  # Add this line to store backend output
 
-        signalBus.backendOutputReceived.connect(self.handle_backend_output)  # Connect the signal to the handler
+        signalBus.backendOutputReceived.connect(self.handle_backend_response)  # Connect the signal to the handler
+        signalBus.backendGraphLoaded.connect(self.handle_graph_loaded)
+        signalBus.backendNoPathFound.connect(self.handle_no_path_found)
+        signalBus.backendPathFound.connect(self.handle_path_found)
+        signalBus.backendEndOutput.connect(self.handle_end_output)
         
         self.initUI()
 
@@ -256,6 +265,161 @@ class MapInterface(QWidget):
                     }
                 }
             };
+
+            // Initialize window.drawnPaths
+            window.drawnPaths = [];
+
+            // Access the global map instance
+            var map = window.map;
+
+            // Initialize markers array
+            var markers = [];
+
+            // Define custom signal class
+            function Signal() {
+                this.listeners = [];
+            }
+            Signal.prototype.connect = function(listener) {
+                this.listeners.push(listener);
+            };
+            Signal.prototype.emit = function(data) {
+                this.listeners.forEach(function(listener) {
+                    listener(data);
+                });
+            };
+
+            // Define mapProperties object
+            var mapProperties = {
+                bounds: null,
+                zoom: null,
+                boundsChanged: new Signal(),
+                zoomChanged: new Signal()
+            };
+
+            // Connect to the PyQt WebChannel
+            new QWebChannel(qt.webChannelTransport, function(channel) {
+                window.pyObj = channel.objects.pyObj;
+                window.mapProperties = mapProperties;
+
+                // Listen for property changes
+                mapProperties.boundsChanged.connect(function(bounds) {
+                    pyObj.updateVisibleTiles(JSON.stringify(bounds), mapProperties.zoom);
+                });
+                mapProperties.zoomChanged.connect(function(zoom) {
+                    pyObj.updateVisibleTiles(JSON.stringify(mapProperties.bounds), zoom);
+                });
+            });
+
+            // Listen for moveend events
+            map.on('moveend', function() {
+                try {
+                    var bounds = map.getBounds();
+                    // Extract only the necessary data from bounds
+                    var boundsData = {
+                        _southWest: {
+                            lat: bounds.getSouth(),
+                            lng: bounds.getWest()
+                        },
+                        _northEast: {
+                            lat: bounds.getNorth(),
+                            lng: bounds.getEast()
+                        }
+                    };
+                    var zoom = map.getZoom();
+                    
+                    // Store values separately to avoid circular references
+                    mapProperties.bounds = boundsData;
+                    mapProperties.zoom = zoom;
+                    
+                    // Emit events with simple data
+                    mapProperties.boundsChanged.emit(boundsData);
+                    mapProperties.zoomChanged.emit(zoom);
+                } catch(e) {
+                    console.error('Error in moveend handler:', e);
+                }
+            });
+
+            // Define custom icons
+            var yellowIcon = L.icon({
+                iconUrl: 'file:///E:/BaiduSyncdisk/Code%20Projects/PyQt%20Projects/Data%20Structure%20Project/app/resource/images/yellow_icon.svg',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+            });
+
+            console.log("Yellow icon created:", yellowIcon);
+
+            // Initialize custom tile layer group
+            window.customTileLayerGroup = L.layerGroup().addTo(map);
+
+            // Listen for click events
+            map.on('click', function(e) {
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
+                var isCtrlPressed = e.originalEvent.ctrlKey;
+                if (isCtrlPressed) {
+                    // Add yellow pin for middle points
+                    var marker = L.marker([lat, lng], {icon: yellowIcon}).addTo(map);
+                    markers.push(marker);
+                    console.log("Added yellow marker at:", lat, lng);
+                    window.pyObj.addMiddlePoint(lat, lng);
+                } else {
+                    if (markers.length >= 2) {
+                        markers.forEach(function(marker) {
+                            map.removeLayer(marker);
+                        });
+                        markers = [];
+                        window.pyObj.clearSelectedNodes();
+                    }
+                    // Add default pin for selected nodes
+                    var marker = L.marker([lat, lng]).addTo(map);
+                    markers.push(marker);
+                    console.log("Added default marker at:", lat, lng);
+                    window.pyObj.addSelectedNode(lat, lng);
+                }
+            });
+
+            map.on('contextmenu', function(e) {
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
+                window.pyObj.removeNearestNode(lat, lng);
+                window.pyObj.removeNearestMiddlePoint(lat, lng);
+
+                // Remove the nearest marker
+                var nearestMarker = null;
+                var minDistance = Infinity;
+                markers.forEach(function(marker) {
+                    var markerLatLng = marker.getLatLng();
+                    var distance = map.distance([lat, lng], markerLatLng);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestMarker = marker;
+                    }
+                });
+                if (nearestMarker && minDistance <= {self.max_distance * 100000}) {
+                    map.removeLayer(nearestMarker);
+                    markers = markers.filter(function(marker) {
+                        return marker !== nearestMarker;
+                    });
+                    console.log("Removed marker at:", nearestMarker.getLatLng());
+                }
+            });
+
+            function refreshCustomLayerGroup() {
+                window.customLayerGroup.eachLayer(function (layer) {
+                    Object.values(layer._tiles).forEach(function(tile) {
+                        if (true) {
+                            var img = tile.el;
+                            var src = img.src;
+                            img.src = ''; // Clear the src to force reload
+                            img.src = src; // Set the src back to reload the tile
+                        }
+                    });
+                });
+            }
+
+            setInterval(refreshCustomLayerGroup, 1000); // Refresh every second
+
         """)
 
         
@@ -431,7 +595,6 @@ class MapInterface(QWidget):
         
         # Start a worker for each tile to fetch nodes from the database
         for tile in visible_tiles:
-            # print(zoom, tile[0], tile[1])
             self.begin_rendering_tile(zoom, tile[0], tile[1])
     
     def begin_rendering_tile(self, z, x, y):
@@ -503,6 +666,8 @@ class MapInterface(QWidget):
 
     @pyqtSlot(float, float)
     def addSelectedNode(self, lat, lng):
+        if len(self.selectedNodes) >= 2:
+            self.clearSelectedNodes()
         self.selectedNodes.append((lat, lng))
 
     @pyqtSlot(float, float)
@@ -535,19 +700,55 @@ class MapInterface(QWidget):
     def addBaseLayerControlButton(self):
         pass
 
+    # def sortMiddlePoints(self):
+    #     start, end = self.selectedNodes
+    #     def distance(node1, node2):
+    #         return math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
+
+    #     sorted_nodes = [start]
+    #     remaining_nodes = self.middlePoints.copy()
+
+    #     current_node = start
+    #     while remaining_nodes:
+    #         nearest_node = min(remaining_nodes, key=lambda node: distance(current_node, node))
+    #         sorted_nodes.append(nearest_node)
+    #         remaining_nodes.remove(nearest_node)
+    #         current_node = nearest_node
+
+    #     sorted_nodes.append(end)
+    #     for node in sorted_nodes:
+    #         if node != start and node != end:
+    #             self.sorted_middle_points.append(node)
+
     def sendDataToBackend(self):
         if self.selectedAlgorithm is None:
             if not self.algorithmWarningShown:
-                QMessageBox.warning(self, "Warning", "No algorithm selected, using Dijkstra as default.", QMessageBox.Ok)
+                InfoBar.warning(
+                    title="Warning",
+                    content="No algorithm selected, using Dijkstra as default.",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
                 self.algorithmWarningShown = True
                 self.selectedAlgorithm = "Dijkstra"
 
         if len(self.selectedNodes) < 2:
             QMessageBox.warning(self, "Warning", "Please select both start and end nodes.", QMessageBox.Ok)
+            InfoBar.warning(
+                title="Warning",
+                content="Please select both start and end nodes.",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM_RIGHT,
+                duration=2000,
+                parent=self
+            )
             return
 
         start, end = self.selectedNodes
-        nodes = [start] + self.middlePoints + [end]
 
         def distance(node1, node2):
             return math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
@@ -563,6 +764,10 @@ class MapInterface(QWidget):
             current_node = nearest_node
 
         sorted_nodes.append(end)
+        self.sorted_middle_points.clear()
+        for node in sorted_nodes:
+            if node != start and node != end:
+                self.sorted_middle_points.append(node)
 
         backend_command = f'{self.selectedAlgorithm} {1 if self.pedestrain_enabled else 0} {1 if self.riding_enabled else 0} {1 if self.driving_enabled else 0} {1 if self.pubTransport_enabled else 0} {len(sorted_nodes)}'
         for node in sorted_nodes:
@@ -570,14 +775,198 @@ class MapInterface(QWidget):
 
         print(f"Sending command to backend: {backend_command}")
         signalBus.sendBackendRequest.emit(backend_command)
+        self.clearDrawnPaths()  # Clear previously drawn paths
 
-    def handle_backend_output(self, output):
-        if '%' in output:
-            self.progressBar.setVisible(True)
-            value = int(output.strip('\r\n').strip('%').split(' ')[-1])
-            self.progressBar.setValue(value)
-            if value == 100:
-                self.progressBar.setVisible(False)
-            print('\r' + output, end='')
-        else:
-            print(output, sep=' ')
+    def handle_backend_response(self, output):
+        lines = output.strip().split('\r\n')
+        # print(lines)
+        for line in lines:
+            if line.isdigit() and int(line) <= 100:
+                progress = int(line)
+                self.progressBar.setValue(progress)
+                return
+
+            if '%' in line:
+                self.progressBar.setVisible(True)
+                value = int(line.strip('\r\n').strip('%').split(' ')[-1])
+                self.progressBar.setValue(value)
+                if value == 100:
+                    self.progressBar.setVisible(False)
+                print('\r' + line, end='')
+                return
+
+            # if 'Loading graph:' in line:
+            #     self.progressBar.setVisible(True)
+            #     t = line.strip('%').split(' ')[-1]
+            #     self.progressBar.setValue(int(t))
+            #     if t == 100:
+            #         self.progressBar.setVisible(False)
+            #     return
+
+            if 'Graph loaded in' in line:
+                self.handle_graph_loaded(line)
+                return
+
+            if line.startswith("TIME"):
+                time_elapsed = line.split()[1]
+                InfoBar.info(
+                    title="Time Elapsed",
+                    content=f"Time taken to find the path: {time_elapsed}",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+                self.begin_collecting_output = True
+
+        if self.begin_collecting_output:
+            self.backend_output_buffer.extend(lines)
+
+        if "END" in lines:
+            self.begin_collecting_output = False
+            # end_index = lines.index("END")
+            path = self.backend_output_buffer.copy()
+            self.backend_output_buffer.clear()
+            if path and path[0] != '':
+                # remove '\r' from each node id
+                for i in range(len(path)):
+                    path[i] = path[i].strip('\r')
+                self.drawPath('\n'.join(path))
+                InfoBar.success(
+                    title="Success",
+                    content="Shortest path found successfully!",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+            else:
+                InfoBar.error(
+                    title="Error",
+                    content="No path found between the selected nodes.",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+
+        elif "NO PATH" in lines:
+            InfoBar.error(
+                title="Error",
+                content="No path found between the selected nodes.",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.BOTTOM_RIGHT,
+                duration=2000,
+                parent=self
+            )
+
+        # Re-enable the button
+        self.showPathButton.setEnabled(True)
+        self.progressBar.setVisible(False)
+
+    def handle_backend_error(self, error):
+        InfoBar.error(
+            title="Error",
+            content=f"An error occurred while communicating with the backend: {error}",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=2000,
+            parent=self
+        )
+        self.showPathButton.setEnabled(True)
+
+    def handle_graph_loaded(self, output):
+        t = output.split(' ')[-1]
+        InfoBar.success(
+            title="Success",
+            content=f"Successfully loaded graph in {t}",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=3000,
+            parent=None
+        )
+
+    def handle_no_path_found(self):
+        InfoBar.error(
+            title="Error",
+            content="No path found between selected nodes.",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=3000,
+            parent=None
+        )
+
+    def handle_path_found(self, output):
+        self.begin_collecting_output = True
+        t = output.split(' ')[-1]
+        InfoBar.success(
+            title="Success",
+            content=f"Successfully found path in {t}",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=3000,
+            parent=None
+        )
+
+    def handle_end_output(self):
+        # # self.backend_output_buffer.pop()  # Remove 'END' from the output buffer
+        # self.begin_collecting_output = False
+        # self.drawPath('\n'.join(self.backend_output_buffer))  # Draw the path from collected backend output
+        # self.backend_output_buffer.clear()  # Clear the buffer after drawing the path
+        pass
+
+    def drawPath(self, output):
+        lines = output.strip().split('\n')
+        path = []
+        cur_middle_point_index = 0
+        start, end = self.selectedNodes
+        path.append(start)  # Add start node
+        for line in lines:
+            if 'NO PATH' in line:
+                return
+            if not line or 'TIME' in line or 'END' in line: 
+                continue
+            if line == "MIDPOINT":
+                if cur_middle_point_index < len(self.middlePoints):
+                    lat, lng = self.sorted_middle_points[cur_middle_point_index]
+                    cur_middle_point_index += 1
+                    path.append((lat, lng))
+                else:
+                    continue
+            else:
+                lat, lng = map(float, line.split())
+                path.append((lat, lng))
+
+        path.append(end)  # Add end node
+        
+        print(path)
+        path_json = json.dumps(path)  # Convert path to JSON string
+        self.browser.page().runJavaScript(f"""
+            var latlngs = {path_json};
+            var polyline = L.polyline(latlngs, {{color: 'blue'}}).addTo(map);
+            window.drawnPaths.push(polyline);
+        """)
+        self.drawnPaths.append(path)
+
+    def clearDrawnPaths(self):
+        self.browser.page().runJavaScript("""
+            if (window.drawnPaths) {
+                window.drawnPaths.forEach(function(path) {
+                    map.removeLayer(path);
+                });
+                window.drawnPaths = [];
+            }
+        """)
+        self.drawnPaths.clear()
+
+    def reset(self):
+        self.clearDrawnPaths()
+        self.clearSelectedNodes()

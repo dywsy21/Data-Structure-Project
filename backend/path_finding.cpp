@@ -519,7 +519,7 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
     std::vector<double> point = {lat, lon};
     int k = 1;
 
-    static const int MAXK = 10;
+    static const int MAXK = 50;
 
     while (k < MAXK) {
         std::vector<std::vector<double>> nearest_points = kd_tree.findKthNearestNeighbor(point, k);

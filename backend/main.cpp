@@ -65,6 +65,9 @@ int main(int argc, char* argv[]) {
     auto load_end_time = std::chrono::high_resolution_clock::now();
     auto load_duration = std::chrono::duration_cast<std::chrono::milliseconds>(load_end_time - load_start_time).count();
     std::cout << "Graph loaded in " << (double)load_duration / (double)1000 << "s" << std::endl;
+    std::cout.flush(); // Ensure the output is flushed immediately
+
+    int cur_node_index = 1;
 
     // for(auto [k, v]: node_id_to_coords) {
     //     std::cout << k << " " << v.first << " " << v.second << std::endl;
@@ -78,6 +81,7 @@ int main(int argc, char* argv[]) {
                     std::cin >> lat >> lon;
                 }
                 std::cout << "NO PATH" << std::endl;
+                std::cout.flush(); // Ensure the output is flushed immediately
                 continue;
             }
 
@@ -99,6 +103,7 @@ int main(int argc, char* argv[]) {
             // if any id of the node is 0, print "NO PATH" and continue
             if (std::find(node_ids.begin(), node_ids.end(), 0) != node_ids.end()) {
                 std::cout << "NO PATH" << std::endl;
+                std::cout.flush(); // Ensure the output is flushed immediately
                 continue;
             }
 
@@ -137,38 +142,56 @@ int main(int argc, char* argv[]) {
                     path_segment = bellman_ford(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
                 } else {
                     std::cout << "Unknown algorithm: " << algorithm << std::endl;
+                    std::cout.flush(); // Ensure the output is flushed immediately
                     continue;
                 }
 
                 if (path_segment.empty()) {
                     std::cout << "NO PATH" << std::endl;
+                    std::cout.flush(); // Ensure the output is flushed immediately
                     break;
                 }
 
-                if (i > 0) path_segment.erase(path_segment.begin());
+                // if (i > 0) path_segment.erase(path_segment.begin());
+                if(not full_path.empty() and i != node_coords.size() - 2) full_path.push_back(0);
+                
                 full_path.insert(full_path.end(), path_segment.begin(), path_segment.end());
             }
 
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
             std::cout << "TIME " << duration << "ms" << std::endl;
+            std::cout.flush(); // Ensure the output is flushed immediately
+
+            // Ensure consecutive nodes are different
+            // full_path.erase(std::unique(full_path.begin(), full_path.end()), full_path.end());
 
             if (!full_path.empty()) {
                 std::cout.precision(10); // Set precision to 10 decimal places
+                int cur_index = 0;
                 for (uint64_t node_index : full_path) {
-                    auto v = kd_tree.points[node_index];
-                    std::cout << v[0] << ' ' << v[1] << '\n';
+                    if (node_index == 0) {
+                        std::cout << "MIDPOINT" << std::endl;
+                    }
+                    else {
+                        auto v = kd_tree.points[node_index];
+                        std::cout << v[0] << ' ' << v[1] << std::endl;
+                    }
                 }
                 std::cout << "END" << std::endl;
+                std::cout.flush(); // Ensure the output is flushed immediately
             } else {
                 std::cout << "NO PATH" << std::endl;
+                std::cout.flush(); // Ensure the output is flushed immediately
             }
         }
         catch (const std::exception& e) {
             std::cout << "Error: " << e.what() << std::endl;
+            std::cout.flush(); // Ensure the output is flushed immediately
         }
     }
 
     std::cout << "Invalid input, exiting..." << std::endl;
+    std::cout.flush(); // Ensure the output is flushed immediately
     return 0;
 }
