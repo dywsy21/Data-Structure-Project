@@ -33,7 +33,7 @@ class MapInterface(QWidget):
         self.algorithmWarningShown = False  # Add this line
         self.on_start_line_edit_changed = pyqtBoundSignal()
         self.on_end_line_edit_changed = pyqtBoundSignal()
-        self.on_checkbox_state_changed = pyqtBoundSignal()
+        # self.on_checkbox_state_changed = pyqtBoundSignal()
         self.thread_pool = QThreadPool()
         signalBus.finishRenderingTile.connect(self.on_tiles_fetched)
         self.middlePoints = []  # Add this line
@@ -124,10 +124,10 @@ class MapInterface(QWidget):
         self.drivingCheckBox.setChecked(self.driving_enabled)
         self.pubTransportCheckBox.setChecked(self.pubTransport_enabled)
 
-        # self.pedestrianCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
-        # self.ridingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
-        # self.drivingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
-        # self.pubTransportCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.pedestrianCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.ridingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.drivingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.pubTransportCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
 
         self.middleLayout.addWidget(self.pedestrianCheckBox, 0, 0)
         self.middleLayout.addWidget(self.ridingCheckBox, 0, 1)
@@ -142,6 +142,7 @@ class MapInterface(QWidget):
         self.resetButton = PushButton('Reset', self.lowerWidget)
         # self.resetButton.clicked.connect(self.reset)
         self.resetButton.setMinimumSize(150, 40)  # Set minimum size
+        self.resetButton.clicked.connect(self.reset)
         self.rightLayout.addWidget(self.showPathButton)
         self.rightLayout.addWidget(self.resetButton)
 
@@ -582,7 +583,7 @@ class MapInterface(QWidget):
     def clearSelectedNodes(self):
         self.selectedNodes.clear()
         self.middlePoints.clear()
-        print("Cleared all selected nodes")
+        print("Cleared all selected nodes and markers")
 
     @pyqtSlot(str, int)
     def updateVisibleTiles(self, bounds_json, zoom):
@@ -668,6 +669,8 @@ class MapInterface(QWidget):
     def addSelectedNode(self, lat, lng):
         if len(self.selectedNodes) >= 2:
             self.clearSelectedNodes()
+            # also clear the drawn paths
+            self.clearDrawnPaths()
         self.selectedNodes.append((lat, lng))
 
     @pyqtSlot(float, float)
@@ -736,7 +739,6 @@ class MapInterface(QWidget):
                 self.selectedAlgorithm = "Dijkstra"
 
         if len(self.selectedNodes) < 2:
-            QMessageBox.warning(self, "Warning", "Please select both start and end nodes.", QMessageBox.Ok)
             InfoBar.warning(
                 title="Warning",
                 content="Please select both start and end nodes.",
@@ -773,6 +775,7 @@ class MapInterface(QWidget):
         for node in sorted_nodes:
             backend_command += f' {node[0]} {node[1]}'
 
+        backend_command += '\n'
         print(f"Sending command to backend: {backend_command}")
         signalBus.sendBackendRequest.emit(backend_command)
         self.clearDrawnPaths()  # Clear previously drawn paths
@@ -968,5 +971,33 @@ class MapInterface(QWidget):
         self.drawnPaths.clear()
 
     def reset(self):
+        self.startLineEdit.clear()
+        self.endLineEdit.clear()
+        self.progressBar.setValue(0)
+        self.progressBar.setVisible(False)
+        self.showPathButton.setEnabled(True)
         self.clearDrawnPaths()
         self.clearSelectedNodes()
+        self.browser.page().runJavaScript("""
+            var markers = window.markers || [];
+            markers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            window.markers = [];
+        """)
+
+        InfoBar.info(
+            title="Info",
+            content="Cleared all selected nodes and displayed paths.",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=2000,
+            parent=self
+        )
+
+    def on_checkbox_state_changed(self):
+        self.pedestrain_enabled = self.pedestrianCheckBox.isChecked()
+        self.riding_enabled = self.ridingCheckBox.isChecked()
+        self.driving_enabled = self.drivingCheckBox.isChecked()
+        self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()

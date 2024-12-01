@@ -78,7 +78,7 @@ class Application(QApplication):
         signalBus.backendStarted.emit()
 
     def handle_send_backend_request(self, request):
-        self.backend_process.write(request.encode() + b'\n')  # Add newline character
+        self.backend_process.write(request.encode())  # Add newline character
         self.backend_process.waitForBytesWritten()  # Ensure the data is written
 
     def handle_backend_error_occurred(self, error):
