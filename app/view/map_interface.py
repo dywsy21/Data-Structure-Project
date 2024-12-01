@@ -275,6 +275,7 @@ class MapInterface(QWidget):
 
             // Initialize markers array
             var markers = [];
+            var yellow_markers = [];
 
             // Define custom signal class
             function Signal() {
@@ -361,7 +362,7 @@ class MapInterface(QWidget):
                 if (isCtrlPressed) {
                     // Add yellow pin for middle points
                     var marker = L.marker([lat, lng], {icon: yellowIcon}).addTo(map);
-                    markers.push(marker);
+                    yellow_markers.push(marker);
                     console.log("Added yellow marker at:", lat, lng);
                     window.pyObj.addMiddlePoint(lat, lng);
                 } else {
@@ -404,6 +405,25 @@ class MapInterface(QWidget):
                     });
                     console.log("Removed marker at:", nearestMarker.getLatLng());
                 }
+
+                // Remove the nearest yellow marker
+                var nearestYellowMarker = null;
+                var minYellowDistance = Infinity;
+                yellow_markers.forEach(function(marker) {
+                    var markerLatLng = marker.getLatLng();
+                    var distance = map.distance([lat, lng], markerLatLng);
+                    if (distance < minYellowDistance) {
+                        minYellowDistance = distance;
+                        nearestYellowMarker = marker;
+                    }
+                });
+                if (nearestYellowMarker && minYellowDistance <= {self.max_distance * 100000}) {
+                    map.removeLayer(nearestYellowMarker);
+                    yellow_markers = yellow_markers.filter(function(marker) {
+                        return marker !== nearestYellowMarker;
+                    });
+                    console.log("Removed yellow marker at:", nearestYellowMarker.getLatLng());
+                }
             });
 
             function refreshCustomLayerGroup() {
@@ -430,6 +450,7 @@ class MapInterface(QWidget):
 
             // Initialize markers array
             var markers = [];
+            var yellow_markers = [];
 
             // Define custom signal class
             function Signal() {{
@@ -516,7 +537,7 @@ class MapInterface(QWidget):
                 if (isCtrlPressed) {{
                     // Add yellow pin for middle points
                     var marker = L.marker([lat, lng], {{icon: yellowIcon}}).addTo(map);
-                    markers.push(marker);
+                    yellow_markers.push(marker);
                     console.log("Added yellow marker at:", lat, lng);
                     window.pyObj.addMiddlePoint(lat, lng);
                 }} else {{
@@ -560,6 +581,25 @@ class MapInterface(QWidget):
                     }});
                     console.log("Removed marker at:", nearestMarker.getLatLng());
                 }}
+
+                // Remove the nearest yellow marker
+                var nearestYellowMarker = null;
+                var minYellowDistance = Infinity;
+                yellow_markers.forEach(function(marker) {{
+                    var markerLatLng = marker.getLatLng();
+                    var distance = map.distance([lat, lng], markerLatLng);
+                    if (distance < minYellowDistance) {{
+                        minYellowDistance = distance;
+                        nearestYellowMarker = marker;
+                    }}
+                }});
+                if (nearestYellowMarker && minYellowDistance <= {self.max_distance * 100000}) {{
+                    map.removeLayer(nearestYellowMarker);
+                    yellow_markers = yellow_markers.filter(function(marker) {{
+                        return marker !== nearestYellowMarker;
+                    }});
+                    console.log("Removed yellow marker at:", nearestYellowMarker.getLatLng());
+                }}
             }});
 
             function refreshCustomLayerGroup() {{
@@ -583,6 +623,19 @@ class MapInterface(QWidget):
     def clearSelectedNodes(self):
         self.selectedNodes.clear()
         self.middlePoints.clear()
+        self.browser.page().runJavaScript("""
+            var markers = window.markers || [];
+            markers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            window.markers = [];
+
+            var yellowMarkers = window.yellow_markers || [];
+            yellowMarkers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            window.yellow_markers = [];
+        """)
         print("Cleared all selected nodes and markers")
 
     @pyqtSlot(str, int)
@@ -984,6 +1037,12 @@ class MapInterface(QWidget):
                 map.removeLayer(marker);
             });
             window.markers = [];
+
+            var yellowMarkers = window.yellow_markers || [];
+            yellowMarkers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            window.yellow_markers = [];
         """)
 
         InfoBar.info(
