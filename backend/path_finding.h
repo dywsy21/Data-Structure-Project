@@ -47,4 +47,7 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
                              const std::unordered_map<uint64_t, std::string>& node_tags,
                              bool pedestrian, bool riding, bool driving, bool pubTransport);
 
+// Declare the function to generate the place name dictionary
+void generate_place_name_dictionary(const std::string& osm_filepath, const std::string& output_file);
+
 #endif // PATH_FINDING_H

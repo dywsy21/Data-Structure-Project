@@ -175,6 +175,8 @@ class MapInterface(QWidget):
         # Add a button to control the base map layer visibility
         self.addBaseLayerControlButton()
 
+        self.loadNamesDic()
+
     def addAlgorithmsToButton(self):
             self.menu = RoundMenu(parent=self)
             algorithms = ["Dijkstra", "A*", "Bellman-Ford", "Floyd-Warshall"]
@@ -625,19 +627,13 @@ class MapInterface(QWidget):
     def clearSelectedNodes(self):
         self.selectedNodes.clear()
         self.middlePoints.clear()
-        # self.browser.page().runJavaScript("""
-        #     var markers = window.markers || [];
-        #     markers.forEach(function(marker) {
-        #         map.removeLayer(marker);
-        #     });
-        #     window.markers = [];
-
-        #     var yellowMarkers = window.yellow_markers || [];
-        #     yellowMarkers.forEach(function(marker) {
-        #         map.removeLayer(marker);
-        #     });
-        #     window.yellow_markers = [];
-        # """)
+        self.browser.page().runJavaScript("""
+            var yellowMarkers = window.yellow_markers || [];
+            yellowMarkers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            window.yellow_markers = [];
+        """)
         print("Cleared all selected nodes and markers")
         signalBus.sendCommonInfo.emit("[INFO] Cleared all selected nodes and markers")
 
@@ -1005,7 +1001,7 @@ class MapInterface(QWidget):
         lines = output.strip().split('\n')
         path = []
         cur_middle_point_index = 0
-        start, end = self.selectedNodes
+        start, end = self.selectedNodes.copy()
         path.append(start)  # Add start node
         for line in lines:
             if 'NO PATH' in line:
@@ -1084,3 +1080,8 @@ class MapInterface(QWidget):
         self.riding_enabled = self.ridingCheckBox.isChecked()
         self.driving_enabled = self.drivingCheckBox.isChecked()
         self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()
+
+    def loadNamesDic(self):
+        pass
+        # with open("E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\place_names.txt", 'r') as f:
+        #     pass

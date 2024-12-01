@@ -10,6 +10,7 @@
 #include <chrono> // Include for timing
 #include <cstdint>
 #include <csignal> // Include for signal handling
+#include <fstream>
 
 // Define the global variable
 std::vector<uint64_t> index_to_node_id;
@@ -66,6 +67,16 @@ int main(int argc, char* argv[]) {
     auto load_duration = std::chrono::duration_cast<std::chrono::milliseconds>(load_end_time - load_start_time).count();
     std::cout << "Graph loaded in " << (double)load_duration / (double)1000 << "s" << std::endl;
     std::cout.flush(); // Ensure the output is flushed immediately
+
+    std::string output_file = "E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\place_names.txt";
+
+    // Check if the output file exists
+    std::ifstream infile(output_file);
+    if (!infile.good()) {
+        // Output file doesn't exist, generate it
+        generate_place_name_dictionary(filepath, output_file);
+    }
+    infile.close();
 
     int cur_node_index = 1;
 

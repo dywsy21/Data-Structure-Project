@@ -170,10 +170,13 @@ bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::s
 
     if (pedestrian && (highway_type == "pedestrian" || highway_type == "footway" ||
                       highway_type == "steps" || highway_type == "path" ||
-                      highway_type == "living_street"))
+                      highway_type == "living_street" ||
+                   highway_type == "residential"))
         return true;
     if (riding && (highway_type == "cycleway" || highway_type == "path" ||
-                  highway_type == "track"))
+                  highway_type == "track" ||
+                   highway_type == "residential"||
+                      highway_type == "living_street"))
         return true;
     if (driving && (highway_type == "motorway" || highway_type == "trunk" ||
                    highway_type == "primary" || highway_type == "secondary" ||
@@ -574,4 +577,100 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
     }
 
     return 0; // Return 0 if no nearest node is found
+}
+
+void generate_place_name_dictionary(const std::string& osm_filepath, const std::string& output_file) {
+    pugi::xml_document doc;
+    if (!doc.load_file(osm_filepath.c_str())) {
+        std::cerr << "Failed to load file: " << osm_filepath << std::endl;
+        return;
+    }
+
+    std::unordered_map<std::string, std::pair<double, double>> name_to_coords;
+    std::unordered_map<uint64_t, std::pair<double, double>> node_coords;
+    pugi::xml_node root = doc.child("osm");
+
+    // Count total elements for progress calculation
+    size_t total_elements = 0;
+    for (pugi::xml_node node = root.child("node"); node; node = node.next_sibling("node")) {
+        ++total_elements;
+    }
+    for (pugi::xml_node way = root.child("way"); way; way = way.next_sibling("way")) {
+        ++total_elements;
+    }
+
+    size_t processed_elements = 0;
+    int last_progress = -1;
+
+    // First pass: Collect node coordinates and names
+    for (pugi::xml_node node = root.child("node"); node; node = node.next_sibling("node")) {
+        uint64_t id = node.attribute("id").as_ullong();
+        double lat = node.attribute("lat").as_double();
+        double lon = node.attribute("lon").as_double();
+        node_coords[id] = {lat, lon};
+
+        for (pugi::xml_node tag = node.child("tag"); tag; tag = tag.next_sibling("tag")) {
+            const char* key = tag.attribute("k").value();
+            if (strcmp(key, "name") == 0) {
+                const char* name = tag.attribute("v").value();
+                name_to_coords[name] = {lat, lon};
+                break; // Only need one name per node
+            }
+        }
+
+        // Update progress
+        ++processed_elements;
+        int progress = static_cast<int>((processed_elements * 100.0) / total_elements);
+        if (progress > last_progress) {
+            last_progress = progress;
+            std::cout << "Dic generation progress: " << progress << std::endl;
+        }
+    }
+
+    // Second pass: Collect way names and associate with the first node's coordinates
+    for (pugi::xml_node way = root.child("way"); way; way = way.next_sibling("way")) {
+        std::string name;
+        bool has_name = false;
+        for (pugi::xml_node tag = way.child("tag"); tag; tag = tag.next_sibling("tag")) {
+            const char* key = tag.attribute("k").value();
+            if (strcmp(key, "name") == 0) {
+                name = tag.attribute("v").value();
+                has_name = true;
+                break;
+            }
+        }
+
+        if (has_name) {
+            // Get the first node reference to get coordinates
+            pugi::xml_node nd = way.child("nd");
+            if (nd) {
+                uint64_t ref = nd.attribute("ref").as_ullong();
+                auto it = node_coords.find(ref);
+                if (it != node_coords.end()) {
+                    name_to_coords[name] = it->second;
+                }
+            }
+        }
+
+        // Update progress
+        ++processed_elements;
+        int progress = static_cast<int>((processed_elements * 100.0) / total_elements);
+        if (progress > last_progress) {
+            last_progress = progress;
+            std::cout << progress << std::endl;
+        }
+    }
+
+    // Write the dictionary to the output file
+    std::ofstream outfile(output_file);
+    if (!outfile.is_open()) {
+        std::cerr << "Failed to open output file: " << output_file << std::endl;
+        return;
+    }
+
+    for (const auto& entry : name_to_coords) {
+        outfile << entry.first << " " << entry.second.first << " " << entry.second.second << std::endl;
+    }
+
+    outfile.close();
 }
