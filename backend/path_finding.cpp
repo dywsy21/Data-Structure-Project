@@ -13,6 +13,7 @@
 #include "k-dtree.h"
 #include <string.h>
 #include "defs.h"
+#define M_PI 3.14159265358979323846
 
 extern std::vector<uint64_t> index_to_node_id;
 
@@ -109,10 +110,19 @@ bool load_graph(const std::string& filepath,
                 if (from_it != node_id_to_index.end() && to_it != node_id_to_index.end()) {
                     uint32_t from_idx = from_it->second;
                     uint32_t to_idx = to_it->second;
-                    // Use precomputed coordinates
                     std::vector<double> from_coords = kd_tree.getPoint(from_idx);
                     std::vector<double> to_coords = kd_tree.getPoint(to_idx);
-                    double distance = std::hypot(to_coords[0] - from_coords[0], to_coords[1] - from_coords[1]);
+                    
+                    // Use Haversine distance for edge weights
+                    double lat1 = from_coords[0] * M_PI / 180.0;
+                    double lat2 = to_coords[0] * M_PI / 180.0;
+                    double dLat = lat2 - lat1;
+                    double dLon = (to_coords[1] - from_coords[1]) * M_PI / 180.0;
+                    
+                    double a = sin(dLat/2) * sin(dLat/2) +
+                              cos(lat1) * cos(lat2) * sin(dLon/2) * sin(dLon/2);
+                    double c = 2 * atan2(sqrt(a), sqrt(1-a));
+                    double distance = 6371000.0 * c; // Earth's radius in meters
                     
                     kd_tree.insertEdge(from_idx, to_idx, distance);
                     kd_tree.insertEdge(to_idx, from_idx, distance); // Assuming undirected graph
@@ -280,9 +290,23 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
                              const std::vector<std::pair<double, double>>& coords,
                              const std::unordered_map<uint64_t, std::string>& node_tags,
                              bool pedestrian, bool riding, bool driving, bool pubTransport) {
-    auto heuristic = [&coords](uint32_t a, uint32_t b) {
-        // Implement a heuristic function here, for simplicity, we use 0 (equivalent to Dijkstra)
-        return 0.0f;
+    // Haversine distance heuristic
+    auto heuristic = [&kd_tree](uint32_t a, uint32_t b) {
+        const double R = 6371000.0; // Earth's radius in meters
+        std::vector<double> point_a = kd_tree.getPoint(a);
+        std::vector<double> point_b = kd_tree.getPoint(b);
+        
+        double lat1 = point_a[0] * M_PI / 180.0;
+        double lat2 = point_b[0] * M_PI / 180.0;
+        double dLat = lat2 - lat1;
+        double dLon = (point_b[1] - point_a[1]) * M_PI / 180.0;
+        
+        double a_val = sin(dLat/2) * sin(dLat/2) +
+                      cos(lat1) * cos(lat2) * 
+                      sin(dLon/2) * sin(dLon/2);
+        double c = 2 * atan2(sqrt(a_val), sqrt(1-a_val));
+        
+        return static_cast<float>(R * c);
     };
 
     std::vector<float> g_score_start(kd_tree.size(), std::numeric_limits<float>::infinity());
@@ -319,9 +343,12 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
         closed_set_start.insert(current_start);
 
         if (closed_set_end.find(current_start) != closed_set_end.end()) {
-            // Path found
+            // Path found - reconstruct the path
             std::vector<uint32_t> path;
-            uint32_t u = current_start;
+            uint32_t meeting_node = current_start;
+
+            // Reconstruct path from start to meeting_node
+            uint32_t u = meeting_node;
             while (u != start) {
                 path.push_back(u);
                 u = came_from_start[u];
@@ -329,11 +356,13 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
             path.push_back(start);
             std::reverse(path.begin(), path.end());
 
-            u = current_start;
+            // Reconstruct path from meeting_node to end
+            u = came_from_end[meeting_node];
             while (u != end) {
-                u = came_from_end[u];
                 path.push_back(u);
+                u = came_from_end[u];
             }
+            path.push_back(end);
 
             return path;
         }
@@ -364,21 +393,26 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
         closed_set_end.insert(current_end);
 
         if (closed_set_start.find(current_end) != closed_set_start.end()) {
-            // Path found
+            // Path found - reconstruct the path
             std::vector<uint32_t> path;
-            uint32_t u = current_end;
+            uint32_t meeting_node = current_end;
+
+            // Reconstruct path from start to meeting_node
+            uint32_t u = meeting_node;
+            while (u != start) {
+                path.push_back(u);
+                u = came_from_start[u];
+            }
+            path.push_back(start);
+            std::reverse(path.begin(), path.end());
+
+            // Reconstruct path from meeting_node to end
+            u = came_from_end[meeting_node];
             while (u != end) {
                 path.push_back(u);
                 u = came_from_end[u];
             }
             path.push_back(end);
-            std::reverse(path.begin(), path.end());
-
-            u = current_end;
-            while (u != start) {
-                u = came_from_start[u];
-                path.push_back(u);
-            }
 
             return path;
         }

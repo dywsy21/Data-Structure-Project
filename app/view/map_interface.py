@@ -625,19 +625,19 @@ class MapInterface(QWidget):
     def clearSelectedNodes(self):
         self.selectedNodes.clear()
         self.middlePoints.clear()
-        self.browser.page().runJavaScript("""
-            var markers = window.markers || [];
-            markers.forEach(function(marker) {
-                map.removeLayer(marker);
-            });
-            window.markers = [];
+        # self.browser.page().runJavaScript("""
+        #     var markers = window.markers || [];
+        #     markers.forEach(function(marker) {
+        #         map.removeLayer(marker);
+        #     });
+        #     window.markers = [];
 
-            var yellowMarkers = window.yellow_markers || [];
-            yellowMarkers.forEach(function(marker) {
-                map.removeLayer(marker);
-            });
-            window.yellow_markers = [];
-        """)
+        #     var yellowMarkers = window.yellow_markers || [];
+        #     yellowMarkers.forEach(function(marker) {
+        #         map.removeLayer(marker);
+        #     });
+        #     window.yellow_markers = [];
+        # """)
         print("Cleared all selected nodes and markers")
         signalBus.sendCommonInfo.emit("[INFO] Cleared all selected nodes and markers")
 
@@ -665,6 +665,9 @@ class MapInterface(QWidget):
                 # copy the tile to the custom layer
                 os.makedirs(f"renderer/cache/{z}", exist_ok=True)
                 shutil.copyfile(f"renderer_sparse/cache/{z}/{x}_{y}.png", f"renderer/cache/{z}/{x}_{y}.png")
+            return
+
+        if os.path.exists(f"renderer/cache/{z}/{x}_{y}.png") and os.path.exists(f"renderer_sparse/cache/{z}/{x}_{y}.png"):
             return
 
         # Render the tile using the appropriate renderer executable asynchronously

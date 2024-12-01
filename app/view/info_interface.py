@@ -28,7 +28,6 @@ class InfoInterface(QWidget):
         signalBus.sendRendererInfo.connect(self.handleRendererInfo)
         signalBus.sendBackendInfo.connect(self.handleBackendInfo)
 
-
         self.initUI()
 
     def initUI(self):
