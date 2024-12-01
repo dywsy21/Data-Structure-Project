@@ -225,8 +225,10 @@ class MapInterface(QWidget):
         }.get(level, "UNKNOWN")
         
         print(f"[JS {level_str}] {message}")
+        signalBus.sendCommonInfo.emit(f"[JS {level_str}] {message}")
         if sourceID or lineNumber:
             print(f"Source: {sourceID}, Line: {lineNumber}")
+            signalBus.sendCommonInfo.emit(f"Source: {sourceID}, Line: {lineNumber}")
 
     @pyqtSlot()
     def on_load_finished(self):
@@ -637,6 +639,7 @@ class MapInterface(QWidget):
             window.yellow_markers = [];
         """)
         print("Cleared all selected nodes and markers")
+        signalBus.sendCommonInfo.emit("[INFO] Cleared all selected nodes and markers")
 
     @pyqtSlot(str, int)
     def updateVisibleTiles(self, bounds_json, zoom):
@@ -677,11 +680,14 @@ class MapInterface(QWidget):
             process.wait()
             if process.returncode != 0:
                 print(f"Error rendering tile {z}/{x}/{y}: {stderr.decode()}")
+                signalBus.sendRendererInfo.emit(f"[ERROR] Failed to render tile {z}/{x}/{y}: {stderr.decode()}")
             else:
                 if self.currentLayerType == "custom" and z <= 13:
                     print(f"\rSuccessfully rendered tile {z}/{x}/{y}", end="")
+                    signalBus.sendRendererInfo.emit(f"[INFO] Successfully rendered tile {z}/{x}/{y}")
                 else:
                     print(f"\rSuccessfully rendered sparse tile {z}/{x}/{y}", end="")
+                    signalBus.sendRendererInfo.emit(f"[INFO] Successfully rendered sparse tile {z}/{x}/{y}")
                 if self.currentLayerType == "custom" and z > 13:
                     # copy the tile to the custom layer
                     os.makedirs(f"renderer/cache/{z}", exist_ok=True)
@@ -740,6 +746,7 @@ class MapInterface(QWidget):
             if distance(nearest_node) <= self.max_distance:
                 self.selectedNodes.remove(nearest_node)
                 print(f"Removed node at: {nearest_node}")
+                signalBus.sendCommonInfo.emit(f"[INFO] Removed node at: {nearest_node}")
 
     @pyqtSlot(float, float)
     def removeNearestMiddlePoint(self, lat, lng):
@@ -752,6 +759,7 @@ class MapInterface(QWidget):
                 if nearest_point in self.middlePoints:
                     self.middlePoints.remove(nearest_point)
                     print(f"Removed middle point at: {nearest_point}")
+                    signalBus.sendCommonInfo.emit(f"[INFO] Removed middle point at: {nearest_point}")
 
     def addBaseLayerControlButton(self):
         pass
@@ -788,6 +796,7 @@ class MapInterface(QWidget):
                     duration=2000,
                     parent=self
                 )
+                signalBus.sendCommonInfo.emit("[INFO] No algorithm selected, using Dijkstra as default.")
                 self.algorithmWarningShown = True
                 self.selectedAlgorithm = "Dijkstra"
 
@@ -830,6 +839,7 @@ class MapInterface(QWidget):
 
         backend_command += '\n'
         print(f"Sending command to backend: {backend_command}")
+        signalBus.sendCommonInfo.emit(f"[INFO] Sending command to backend: {backend_command}")
         signalBus.sendBackendRequest.emit(backend_command)
         self.clearDrawnPaths()  # Clear previously drawn paths
 
@@ -849,6 +859,7 @@ class MapInterface(QWidget):
                 if value == 100:
                     self.progressBar.setVisible(False)
                 print('\r' + line, end='')
+                signalBus.sendCommonInfo.emit(f"[INFO] {line}")
                 return
 
             # if 'Loading graph:' in line:
@@ -874,6 +885,7 @@ class MapInterface(QWidget):
                     duration=2000,
                     parent=self
                 )
+                signalBus.sendBackendInfo.emit(f"[INFO] Time taken to find the path: {time_elapsed}")
                 self.begin_collecting_output = True
 
         if self.begin_collecting_output:
@@ -898,6 +910,7 @@ class MapInterface(QWidget):
                     duration=2000,
                     parent=self
                 )
+                signalBus.sendCommonInfo.emit("[INFO] Shortest path found successfully!")
             else:
                 InfoBar.error(
                     title="Error",
@@ -908,6 +921,7 @@ class MapInterface(QWidget):
                     duration=2000,
                     parent=self
                 )
+                signalBus.sendCommonInfo.emit("[ERROR] No path found between the selected nodes.")
 
         elif "NO PATH" in lines:
             InfoBar.error(
@@ -919,6 +933,7 @@ class MapInterface(QWidget):
                 duration=2000,
                 parent=self
             )
+            signalBus.sendCommonInfo.emit("[ERROR] No path found between the selected nodes.")
 
         # Re-enable the button
         self.showPathButton.setEnabled(True)
@@ -935,6 +950,7 @@ class MapInterface(QWidget):
             parent=self
         )
         self.showPathButton.setEnabled(True)
+        signalBus.sendCommonInfo.emit(f"[ERROR] An error occurred while communicating with the backend: {error}")
 
     def handle_graph_loaded(self, output):
         t = output.split(' ')[-1]
@@ -947,6 +963,7 @@ class MapInterface(QWidget):
             duration=3000,
             parent=None
         )
+        signalBus.sendCommonInfo.emit(f"[INFO] Successfully loaded graph in {t}")
 
     def handle_no_path_found(self):
         InfoBar.error(
@@ -958,6 +975,7 @@ class MapInterface(QWidget):
             duration=3000,
             parent=None
         )
+        signalBus.sendCommonInfo.emit("[ERROR] No path found between selected nodes.")
 
     def handle_path_found(self, output):
         self.begin_collecting_output = True
@@ -971,6 +989,7 @@ class MapInterface(QWidget):
             duration=3000,
             parent=None
         )
+        signalBus.sendCommonInfo.emit(f"[INFO] Successfully found path in {t}")
 
     def handle_end_output(self):
         # # self.backend_output_buffer.pop()  # Remove 'END' from the output buffer
@@ -1004,6 +1023,7 @@ class MapInterface(QWidget):
         path.append(end)  # Add end node
         
         print(path)
+        signalBus.sendBackendInfo.emit(f"[INFO] Path found: {path}")
         path_json = json.dumps(path)  # Convert path to JSON string
         self.browser.page().runJavaScript(f"""
             var latlngs = {path_json};
@@ -1054,6 +1074,7 @@ class MapInterface(QWidget):
             duration=2000,
             parent=self
         )
+        signalBus.sendCommonInfo.emit("[INFO] Cleared all selected nodes and displayed paths.")
 
     def on_checkbox_state_changed(self):
         self.pedestrain_enabled = self.pedestrianCheckBox.isChecked()

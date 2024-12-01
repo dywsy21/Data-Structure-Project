@@ -21,5 +21,8 @@ class SignalBus(QObject):
     backendNoPathFound = pyqtSignal()
     backendPathFound = pyqtSignal(str)
     backendEndOutput = pyqtSignal()
+    sendBackendInfo = pyqtSignal(str)
+    sendRendererInfo = pyqtSignal(str)
+    sendCommonInfo = pyqtSignal(str)
 
 signalBus = SignalBus()

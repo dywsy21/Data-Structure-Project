@@ -9,6 +9,7 @@ from qfluentwidgets import InfoBar, InfoBarPosition  # Ensure InfoBar imports ar
 
 from .setting_interface import SettingInterface
 from .map_interface import MapInterface, QPixmap
+from .info_interface import InfoInterface
 from ..common.config import cfg
 from ..common.icon import Icon
 from ..common.signal_bus import signalBus
@@ -23,6 +24,7 @@ class MainWindow(FluentWindow):
 
         # 创建子界面
         self.mapInterface = MapInterface(self)
+        self.infoInterface = InfoInterface(self)
         self.settingInterface = SettingInterface(self)
         self.connectSignalToSlot()
 
@@ -61,6 +63,8 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.mapInterface, Icon.MAP, self.tr('Map'))  # 添加地图界面到导航栏
         self.addSubInterface(
             self.settingInterface, FIF.SETTING, self.tr('Settings'), NavigationItemPosition.BOTTOM)
+        self.addSubInterface(
+            self.infoInterface, FIF.INFO, self.tr('Info'))
 
         self.splashScreen.finish()
 
