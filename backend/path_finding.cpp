@@ -530,7 +530,7 @@ std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree, uint32_t start, uint
         processed_nodes++;
         int progress = static_cast<int>((processed_nodes * 100.0) / total_nodes);
         if (progress > last_progress) {
-            std::cout << progress << std::endl;
+            std::cout << "Progress: " << progress << std::endl;
             last_progress = progress;
         }
     }
@@ -667,6 +667,9 @@ void generate_place_name_dictionary(const std::string& osm_filepath, const std::
         std::cerr << "Failed to open output file: " << output_file << std::endl;
         return;
     }
+
+    outfile.precision(10); // Set precision to 10 decimal places
+    outfile << std::fixed; // Use fixed-point notation
 
     for (const auto& entry : name_to_coords) {
         outfile << entry.first << " " << entry.second.first << " " << entry.second.second << std::endl;

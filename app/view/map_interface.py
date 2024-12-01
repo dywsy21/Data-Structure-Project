@@ -31,10 +31,11 @@ class MapInterface(QWidget):
         self.pubTransport_enabled = True
         self.selectedAlgorithm = None  # Add this line
         self.algorithmWarningShown = False  # Add this line
-        self.on_start_line_edit_changed = pyqtBoundSignal()
-        self.on_end_line_edit_changed = pyqtBoundSignal()
+        # self.on_start_line_edit_changed = pyqtBoundSignal()
+        # self.on_end_line_edit_changed = pyqtBoundSignal()
         # self.on_checkbox_state_changed = pyqtBoundSignal()
         self.thread_pool = QThreadPool()
+        self.namesDic = {}
         signalBus.finishRenderingTile.connect(self.on_tiles_fetched)
         self.middlePoints = []  # Add this line
         self.sorted_middle_points = []  # Add this line
@@ -90,6 +91,9 @@ class MapInterface(QWidget):
         
         self.startLineEdit.setMaximumWidth(230)
         self.endLineEdit.setMaximumWidth(230)
+
+        self.startLineEdit.searchButton.clicked.connect(self.start_line_edit_search_clicked)
+        self.endLineEdit.searchButton.clicked.connect(self.end_line_edit_search_clicked)
 
         self.leftLayout.addWidget(self.algorithmButton)
         self.leftLayout.addWidget(self.startLineEdit)
@@ -176,6 +180,7 @@ class MapInterface(QWidget):
         self.addBaseLayerControlButton()
 
         self.loadNamesDic()
+        self.updateLineSearchCompleter()
 
     def addAlgorithmsToButton(self):
             self.menu = RoundMenu(parent=self)
@@ -836,7 +841,7 @@ class MapInterface(QWidget):
         for node in sorted_nodes:
             backend_command += f' {node[0]} {node[1]}'
 
-        backend_command += '\n'
+        backend_command += '\r\n'
         print(f"Sending command to backend: {backend_command}")
         signalBus.sendCommonInfo.emit(f"[INFO] Sending command to backend: {backend_command}")
         signalBus.sendBackendRequest.emit(backend_command)
@@ -851,7 +856,7 @@ class MapInterface(QWidget):
                 self.progressBar.setValue(progress)
                 return
 
-            if '%' in line:
+            if '%' in line or "Progress:" in line:
                 self.progressBar.setVisible(True)
                 value = int(line.strip('\r\n').strip('%').split(' ')[-1])
                 self.progressBar.setValue(value)
@@ -1043,8 +1048,8 @@ class MapInterface(QWidget):
         self.drawnPaths.clear()
 
     def reset(self):
-        self.startLineEdit.clear()
-        self.endLineEdit.clear()
+        # self.startLineEdit.clear()
+        # self.endLineEdit.clear()
         self.progressBar.setValue(0)
         self.progressBar.setVisible(False)
         self.showPathButton.setEnabled(True)
@@ -1082,6 +1087,39 @@ class MapInterface(QWidget):
         self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()
 
     def loadNamesDic(self):
-        pass
-        # with open("E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\place_names.txt", 'r') as f:
-        #     pass
+        with open("E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\place_names.txt", 'r', encoding='utf-8') as f:
+            for line in f:
+                if line:
+                    parts = line.strip().rsplit(' ', 2)
+                    name, lat, lon = parts[0], parts[1], parts[2]
+                    self.namesDic[name] = (float(lat), float(lon))
+
+    def updateLineSearchCompleter(self):
+        completer = QCompleter(self.namesDic.keys())
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.startLineEdit.setCompleter(completer)
+        self.endLineEdit.setCompleter(completer)
+
+    def start_line_edit_search_clicked(self):
+        text = self.startLineEdit.text()
+        if text in self.namesDic:
+            lat, lon = self.namesDic[text]
+            self.addSelectedNode(lat, lon)
+            self.browser.page().runJavaScript(f"""
+                var marker = L.marker([{lat}, {lon}]).addTo(map);
+                window.markers.push(marker);
+            """)
+            print(f"Added start node: {text} at ({lat}, {lon})")
+            signalBus.sendCommonInfo.emit(f"[INFO] Added start node: {text} at ({lat}, {lon})")
+
+    def end_line_edit_search_clicked(self):
+        text = self.endLineEdit.text()
+        if text in self.namesDic:
+            lat, lon = self.namesDic[text]
+            self.addSelectedNode(lat, lon)
+            self.browser.page().runJavaScript(f"""
+                var marker = L.marker([{lat}, {lon}]).addTo(map);
+                window.markers.push(marker);
+            """)
+            print(f"Added end node: {text} at ({lat}, {lon})")
+            signalBus.sendCommonInfo.emit(f"[INFO] Added end node: {text} at ({lat}, {lon})")
