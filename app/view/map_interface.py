@@ -122,6 +122,7 @@ class MapInterface(QWidget):
         self.ridingCheckBox = CheckBox('Riding', self.lowerWidget)
         self.drivingCheckBox = CheckBox('Driving', self.lowerWidget)
         self.pubTransportCheckBox = CheckBox('Public Transport', self.lowerWidget)
+        self.refreshCheckBox = CheckBox('Refresh Custom Layers (1s interval)', self.lowerWidget)
 
         self.pedestrianCheckBox.setChecked(self.pedestrain_enabled)
         self.ridingCheckBox.setChecked(self.riding_enabled)
@@ -132,11 +133,13 @@ class MapInterface(QWidget):
         self.ridingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
         self.drivingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
         self.pubTransportCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
+        self.refreshCheckBox.stateChanged.connect(self.on_refresh_checkbox_state_changed)  # Connect the signal
 
         self.middleLayout.addWidget(self.pedestrianCheckBox, 0, 0)
         self.middleLayout.addWidget(self.ridingCheckBox, 0, 1)
         self.middleLayout.addWidget(self.drivingCheckBox, 1, 0)
         self.middleLayout.addWidget(self.pubTransportCheckBox, 1, 1)
+        self.middleLayout.addWidget(self.refreshCheckBox, 2, 0, 1, 2)
 
         # Right Layout for Buttons
         self.rightLayout = QVBoxLayout()
@@ -435,6 +438,30 @@ class MapInterface(QWidget):
                 }
             });
 
+            // Define variables to store interval IDs
+            var refreshIntervalCustomLayer = null;
+            var refreshIntervalCustomSparseLayer = null;
+
+            function startRefreshing() {
+                if (!refreshIntervalCustomLayer) {
+                    refreshIntervalCustomLayer = setInterval(refreshCustomLayerGroup, 1000); // Refresh every second
+                }
+                if (!refreshIntervalCustomSparseLayer) {
+                    refreshIntervalCustomSparseLayer = setInterval(refreshCustomSparseLayerGroup, 1000); // Refresh every second
+                }
+            }
+
+            function stopRefreshing() {
+                if (refreshIntervalCustomLayer) {
+                    clearInterval(refreshIntervalCustomLayer);
+                    refreshIntervalCustomLayer = null;
+                }
+                if (refreshIntervalCustomSparseLayer) {
+                    clearInterval(refreshIntervalCustomSparseLayer);
+                    refreshIntervalCustomSparseLayer = null;
+                }
+            }
+
             function refreshCustomLayerGroup() {
                 window.customLayerGroup.eachLayer(function (layer) {
                     Object.values(layer._tiles).forEach(function(tile) {
@@ -448,8 +475,18 @@ class MapInterface(QWidget):
                 });
             }
 
-            setInterval(refreshCustomLayerGroup, 1000); // Refresh every second
-
+            function refreshCustomSparseLayerGroup() {
+                window.customLayerGroup_sparse.eachLayer(function (layer) {
+                    Object.values(layer._tiles).forEach(function(tile) {
+                        if (true) {
+                            var img = tile.el;
+                            var src = img.src;
+                            img.src = ''; // Clear the src to force reload
+                            img.src = src; // Set the src back to reload the tile
+                        }
+                    });
+                });
+            }
         """)
 
         
@@ -611,22 +648,13 @@ class MapInterface(QWidget):
                 }}
             }});
 
-            function refreshCustomLayerGroup() {{
-                window.customLayerGroup.eachLayer(function (layer) {{
-                    Object.values(layer._tiles).forEach(function(tile) {{
-                        if (true) {{
-                            var img = tile.el;
-                            var src = img.src;
-                            img.src = ''; // Clear the src to force reload
-                            img.src = src; // Set the src back to reload the tile
-                        }}
-                    }});
-                }});
-            }}
-
-            setInterval(refreshCustomLayerGroup, 1000); // Refresh every second
-
         """)
+
+    def on_refresh_checkbox_state_changed(self, state):
+        if state == Qt.Checked:
+            self.browser.page().runJavaScript("startRefreshing();")
+        else:
+            self.browser.page().runJavaScript("stopRefreshing();")
 
     @pyqtSlot()
     def clearSelectedNodes(self):
