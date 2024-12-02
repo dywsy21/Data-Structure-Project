@@ -20,6 +20,7 @@ args = [
     '--nofollow-import-to=pywin,numpy,scipy,PIL,colorthief',
     '--follow-import-to=win32com,win32gui,win32print,qfluentwidgets,app',
     '--output-dir=dist/main',
+    '--onefile',
     'main.py',
 ]
 

@@ -2,8 +2,8 @@
 from qfluentwidgets import (SwitchSettingCard, FolderListSettingCard,
                             OptionsSettingCard, PushSettingCard,
                             HyperlinkCard, PrimaryPushSettingCard, ScrollArea,
-                            ComboBoxSettingCard, ExpandLayout, Theme, CustomColorSettingCard,
-                            setTheme, setThemeColor, isDarkTheme, setFont)
+                            ComboBoxSettingCard, ExpandLayout, Theme, CustomColorSettingCard, TextEdit,
+                            setTheme, setThemeColor, isDarkTheme, setFont, RangeSettingCard)
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import SettingCardGroup as CardGroup
 from qfluentwidgets import InfoBar
@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QUrl, QStandardPaths
 from PyQt5.QtGui import QDesktopServices, QFont
 from PyQt5.QtWidgets import QWidget, QLabel, QFileDialog
 
-from ..common.config import cfg, isWin11
+from ..common.config import cfg, isWin11, pedSpeed, rideSpeed, driveSpeed, pubSpeed
 from ..common.setting import HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR, REPO_URL
 from ..common.signal_bus import signalBus
 from ..common.style_sheet import StyleSheet
@@ -71,6 +71,38 @@ class SettingInterface(ScrollArea):
             parent=self.personalGroup
         )
 
+        # advanced settings
+        self.advancedGroup = SettingCardGroup(
+            self.tr('Advanced'), self.scrollWidget)
+        self.pedestrainCard = RangeSettingCard(
+            cfg.pedestrianSpeed,
+            FIF.ROBOT,
+            self.tr('Walking speed'),
+            self.tr('Set the speed of pedestrian (km/h)'),
+            parent=self.advancedGroup
+        )
+        self.ridingCard = RangeSettingCard(
+            cfg.ridingSpeed,
+            FIF.SPEED_MEDIUM,
+            self.tr('Riding speed'),
+            self.tr('Set the speed of riding (km/h)'),
+            parent=self.advancedGroup
+        )
+        self.drivingCard = RangeSettingCard(
+            cfg.drivingSpeed,
+            FIF.CAR,
+            self.tr('Driving speed'),
+            self.tr('Set the speed of driving (km/h)'),
+            parent=self.advancedGroup
+        )
+        self.pubTransportCard = RangeSettingCard(
+            cfg.pubTransportSpeed,
+            FIF.BUS,
+            self.tr('Public Transport speed'),
+            self.tr('Set the speed of public transport (km/h)'),
+            parent=self.advancedGroup
+        )
+
         # application
         self.aboutGroup = SettingCardGroup(self.tr('About'), self.scrollWidget)
         self.aboutCard = PrimaryPushSettingCard(
@@ -116,12 +148,18 @@ class SettingInterface(ScrollArea):
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.zoomCard)
 
+        self.advancedGroup.addSettingCard(self.pedestrainCard)
+        self.advancedGroup.addSettingCard(self.ridingCard)
+        self.advancedGroup.addSettingCard(self.drivingCard)
+        self.advancedGroup.addSettingCard(self.pubTransportCard)
+
         self.aboutGroup.addSettingCard(self.aboutCard)
 
         # add setting card group to layout
         self.expandLayout.setSpacing(28)
         self.expandLayout.setContentsMargins(36, 10, 36, 0)
         self.expandLayout.addWidget(self.personalGroup)
+        self.expandLayout.addWidget(self.advancedGroup)
         self.expandLayout.addWidget(self.aboutGroup)
 
     def _showRestartTooltip(self):
@@ -141,3 +179,15 @@ class SettingInterface(ScrollArea):
         self.micaCard.checkedChanged.connect(signalBus.micaEnableChanged)
 
         self.aboutCard.clicked.connect(signalBus.visitSourceCodeSig)
+
+        self.pedestrainCard.slider.valueChanged.connect(self.onSliderValueChanged)
+        self.ridingCard.slider.valueChanged.connect(self.onSliderValueChanged)
+        self.drivingCard.slider.valueChanged.connect(self.onSliderValueChanged)
+        self.pubTransportCard.slider.valueChanged.connect(self.onSliderValueChanged)
+
+    def onSliderValueChanged(self):
+        global pedSpeed, rideSpeed, driveSpeed, pubSpeed
+        pedSpeed = self.pedestrainCard.slider.value()
+        rideSpeed = self.ridingCard.slider.value()
+        driveSpeed = self.drivingCard.slider.value()
+        pubSpeed = self.pubTransportCard.slider.value()

@@ -17,6 +17,22 @@
 
 extern std::vector<uint64_t> index_to_node_id;
 
+// Function to calculate the Haversine distance between two points
+double haversine_distance(double lat1, double lon1, double lat2, double lon2) {
+    const double R = 6371000.0; // Earth's radius in meters
+    double dLat = (lat2 - lat1) * M_PI / 180.0;
+    double dLon = (lon2 - lon1) * M_PI / 180.0;
+    lat1 = lat1 * M_PI / 180.0;
+    lat2 = lat2 * M_PI / 180.0;
+
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+               cos(lat1) * cos(lat2) *
+               sin(dLon / 2) * sin(dLon / 2);
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return R * c;
+}
+
 // Function to load the graph from an XML file
 bool load_graph(const std::string& filepath,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
@@ -37,28 +53,32 @@ bool load_graph(const std::string& filepath,
         return false;
     }
 
-    // First pass: Estimate counts to reserve space
+    // First pass: Identify nodes that are part of relevant ways
     size_t node_count = 0;
     size_t way_count = 0;
-    std::unordered_set<uint64_t> highway_node_ids;
+    std::unordered_set<uint64_t> relevant_node_ids;
     for (pugi::xml_node elem = root.first_child(); elem; elem = elem.next_sibling()) {
         const char* name = elem.name();
         if (strcmp(name, "node") == 0) {
             ++node_count;
         } else if (strcmp(name, "way") == 0) {
             ++way_count;
-            bool has_highway_tag = false;
+            bool has_relevant_tag = false;
             for (pugi::xml_node tag = elem.child("tag"); tag; tag = tag.next_sibling("tag")) {
-                const char* key = tag.attribute("k").as_string();
-                if (strcmp(key, "highway") == 0) {
-                    has_highway_tag = true;
+                const char* key = tag.attribute("k").value();
+                if (strcmp(key, "highway") == 0 ||
+                    strcmp(key, "cycleway") == 0 ||
+                    strcmp(key, "cycleway:left") == 0 ||
+                    strcmp(key, "cycleway:right") == 0 ||
+                    strcmp(key, "railway") == 0) {
+                    has_relevant_tag = true;
                     break;
                 }
             }
-            if (has_highway_tag) {
+            if (has_relevant_tag) {
                 for (pugi::xml_node nd = elem.child("nd"); nd; nd = nd.next_sibling("nd")) {
-                    uint64_t ref = nd.attribute("ref").as_ullong();
-                    highway_node_ids.insert(ref);
+                    uint64_t node_id = nd.attribute("ref").as_ullong();
+                    relevant_node_ids.insert(node_id);
                 }
             }
         }
@@ -86,58 +106,57 @@ bool load_graph(const std::string& filepath,
             uint64_t id = elem.attribute("id").as_ullong();
             double lat = elem.attribute("lat").as_double();
             double lon = elem.attribute("lon").as_double();
-            if (highway_node_ids.find(id) != highway_node_ids.end()) {
+            if (relevant_node_ids.find(id) != relevant_node_ids.end()) {
                 node_id_to_index[id] = index;
                 index_to_node_id.push_back(id);
                 kd_tree.insert({lat, lon}, index); // Pass index here
                 ++index;
+                node_id_to_coords[id] = std::make_pair(lat, lon);
             }
-            // node_id_to_coords[id] = std::make_pair(lat, lon);
-
         } else if (strcmp(name, "way") == 0) {
             std::vector<uint64_t> node_refs;
             for (pugi::xml_node nd = elem.child("nd"); nd; nd = nd.next_sibling("nd")) {
-                uint64_t ref = nd.attribute("ref").as_ullong();
-                node_refs.push_back(ref);
+                uint64_t node_id = nd.attribute("ref").as_ullong();
+                node_refs.push_back(node_id);
             }
 
-            // Add edges between consecutive nodes
-            for (size_t i = 0; i < node_refs.size() - 1; ++i) {
-                uint64_t from_id = node_refs[i];
-                uint64_t to_id = node_refs[i + 1];
-                auto from_it = node_id_to_index.find(from_id);
-                auto to_it = node_id_to_index.find(to_id);
-                if (from_it != node_id_to_index.end() && to_it != node_id_to_index.end()) {
-                    uint32_t from_idx = from_it->second;
-                    uint32_t to_idx = to_it->second;
-                    std::vector<double> from_coords = kd_tree.getPoint(from_idx);
-                    std::vector<double> to_coords = kd_tree.getPoint(to_idx);
-                    
-                    // Use Haversine distance for edge weights
-                    double lat1 = from_coords[0] * M_PI / 180.0;
-                    double lat2 = to_coords[0] * M_PI / 180.0;
-                    double dLat = lat2 - lat1;
-                    double dLon = (to_coords[1] - from_coords[1]) * M_PI / 180.0;
-                    
-                    double a = sin(dLat/2) * sin(dLat/2) +
-                              cos(lat1) * cos(lat2) * sin(dLon/2) * sin(dLon/2);
-                    double c = 2 * atan2(sqrt(a), sqrt(1-a));
-                    double distance = 6371000.0 * c; // Earth's radius in meters
-                    
-                    kd_tree.insertEdge(from_idx, to_idx, distance);
-                    kd_tree.insertEdge(to_idx, from_idx, distance); // Assuming undirected graph
+            bool has_relevant_tag = false;
+            std::string way_type;
+            for (pugi::xml_node tag = elem.child("tag"); tag; tag = tag.next_sibling("tag")) {
+                const char* key = tag.attribute("k").value();
+                const char* value = tag.attribute("v").value();
+                if (strcmp(key, "highway") == 0 ||
+                    strcmp(key, "cycleway") == 0 ||
+                    strcmp(key, "cycleway:left") == 0 ||
+                    strcmp(key, "cycleway:right") == 0 ||
+                    strcmp(key, "railway") == 0) {
+                    has_relevant_tag = true;
+                    way_type = value;
+                    break;
                 }
             }
 
-            // Handle tags for ways
-            for (pugi::xml_node tag = elem.child("tag"); tag; tag = tag.next_sibling("tag")) {
-                const char* key = tag.attribute("k").value();
-                if (strcmp(key, "highway") == 0) {
-                    const char* value = tag.attribute("v").value();
-                    for (uint64_t node_id : node_refs) {
-                        node_tags[node_id] = value;
+            if (has_relevant_tag) {
+                // Store the way type for all nodes in this way
+                for (uint64_t node_id : node_refs) {
+                    node_tags[node_id] = way_type;
+                }
+
+                // Add edges between consecutive nodes
+                for (size_t i = 0; i < node_refs.size() - 1; ++i) {
+                    auto from_it = node_id_to_index.find(node_refs[i]);
+                    auto to_it = node_id_to_index.find(node_refs[i + 1]);
+                    if (from_it != node_id_to_index.end() && to_it != node_id_to_index.end()) {
+                        uint32_t from = from_it->second;
+                        uint32_t to = to_it->second;
+                        double lat1 = kd_tree.getPoint(from)[0];
+                        double lon1 = kd_tree.getPoint(from)[1];
+                        double lat2 = kd_tree.getPoint(to)[0];
+                        double lon2 = kd_tree.getPoint(to)[1];
+                        double weight = haversine_distance(lat1, lon1, lat2, lon2);
+                        kd_tree.insertEdge(from, to, weight);
+                        kd_tree.insertEdge(to, from, weight); // Assuming undirected graph
                     }
-                    break; // Assuming one highway tag per way
                 }
             }
         }
@@ -176,7 +195,8 @@ bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::s
     if (riding && (highway_type == "cycleway" || highway_type == "path" ||
                   highway_type == "track" ||
                    highway_type == "residential"||
-                      highway_type == "living_street"))
+                      highway_type == "living_street" || highway_type == "cycleway:left" ||
+                   highway_type == "cycleway:right"))
         return true;
     if (driving && (highway_type == "motorway" || highway_type == "trunk" ||
                    highway_type == "primary" || highway_type == "secondary" ||
@@ -186,7 +206,7 @@ bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::s
                    highway_type == "residential"))
         return true;
     if (pubTransport && (highway_type == "bus_stop" || highway_type == "motorway_junction" ||
-                        highway_type == "traffic_signals" || highway_type == "crossing"))
+                        highway_type == "traffic_signals" || highway_type == "crossing" || highway_type == "railway"))
         return true;
 
     return false;

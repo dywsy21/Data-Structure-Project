@@ -4,13 +4,18 @@ from enum import Enum
 
 from PyQt5.QtCore import QLocale
 from qfluentwidgets import (qconfig, QConfig, ConfigItem, OptionsConfigItem, BoolValidator,
-                            OptionsValidator, Theme, FolderValidator, ConfigSerializer)
+                            OptionsValidator, Theme, FolderValidator, ConfigSerializer, RangeConfigItem, RangeValidator)
 
 from .setting import CONFIG_FILE
 import os
 map_relative_path = os.path.join("backend", "data", "map.osm")
 db_path = os.path.join("backend", "data", "map.db")
 map_html_path = os.path.join("AppData", "map.html")
+
+pedSpeed = 1
+rideSpeed = 15
+driveSpeed = 60
+pubSpeed = 60
 
 class Language(Enum):
     """ Language enumeration """
@@ -51,6 +56,11 @@ class Config(QConfig):
     # software update
     checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
 
+    # speed settings
+    pedestrianSpeed = RangeConfigItem("Speed", "PedestrianSpeed", 1, RangeValidator(1, 5))
+    ridingSpeed = RangeConfigItem("Speed", "RidingSpeed", 15, RangeValidator(5, 30))
+    drivingSpeed = RangeConfigItem("Speed", "DrivingSpeed", 60, RangeValidator(20, 120))
+    pubTransportSpeed = RangeConfigItem("Speed", "PubTransportSpeed", 60, RangeValidator(20, 150))
 
 cfg = Config()
 cfg.themeMode.value = Theme.AUTO

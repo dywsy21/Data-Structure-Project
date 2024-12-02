@@ -8,7 +8,7 @@ DEBUG = False
 
 YEAR = 2024
 AUTHOR = "Wangsy"
-VERSION = "v0.0.1"
+VERSION = "v1.0.0"
 APP_NAME = "Polaris"
 HELP_URL = "https://github.com/dywsy21/Data-Structure-Project/blob/main/README.md"
 REPO_URL = "https://github.com/dywsy21/Data-Structure-Project"

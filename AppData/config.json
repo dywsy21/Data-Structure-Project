@@ -7,6 +7,12 @@
         "Language": "Auto",
         "MicaEnabled": false
     },
+    "Speed": {
+        "DrivingSpeed": 120,
+        "PedestrianSpeed": 1,
+        "PubTransportSpeed": 101,
+        "RidingSpeed": 17
+    },
     "QFluentWidgets": {
         "ThemeColor": "#ff009faa",
         "ThemeMode": "Light"
