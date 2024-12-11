@@ -33,6 +33,47 @@ double haversine_distance(double lat1, double lon1, double lat2, double lon2) {
     return R * c;
 }
 
+void process_public_transport_relation(const Relation& relation,
+                                     KdTree& kd_tree,
+                                     const std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
+                                     std::unordered_map<uint64_t, std::string>& node_tags) {
+    if (relation.type != "route" || (relation.route_type != "bus" && relation.route_type != "subway"))
+        return;
+
+    // Process stops and platforms
+    for (const auto& member : relation.members) {
+        if (member.type == "node" && (member.role == "stop" || member.role == "platform")) {
+            auto node_it = node_id_to_index.find(member.ref);
+            if (node_it != node_id_to_index.end()) {
+                // Tag the node as a public transport stop
+                node_tags[member.ref] = relation.route_type + "_stop";
+            }
+        }
+    }
+
+    // Process route ways
+    std::vector<uint64_t> way_refs;
+    for (const auto& member : relation.members) {
+        if (member.type == "way" && member.role.empty()) {
+            way_refs.push_back(member.ref);
+        }
+    }
+
+    // Connect consecutive ways in the route
+    for (size_t i = 0; i < way_refs.size(); ++i) {
+        uint64_t current_way = way_refs[i];
+        if (i > 0) {
+            uint64_t prev_way = way_refs[i-1];
+            // Add route connection to node tags
+            // This will be used in is_node_allowed to allow public transport routing
+            auto it = node_id_to_index.find(current_way);
+            if (it != node_id_to_index.end()) {
+                node_tags[current_way] = relation.route_type;
+            }
+        }
+    }
+}
+
 // Function to load the graph from an XML file
 bool load_graph(const std::string& filepath,
                 std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
@@ -174,6 +215,38 @@ bool load_graph(const std::string& filepath,
             std::cout << "\rLoading graph: " << progress << "%";
             std::cout.flush();
         }
+    }
+
+    std::vector<Relation> relations;
+    for (pugi::xml_node rel = root.child("relation"); rel; rel = rel.next_sibling("relation")) {
+        Relation relation;
+        relation.id = rel.attribute("id").as_ullong();
+        
+        // Process relation tags
+        for (pugi::xml_node tag = rel.child("tag"); tag; tag = tag.next_sibling("tag")) {
+            std::string key = tag.attribute("k").value();
+            std::string value = tag.attribute("v").value();
+            relation.tags[key] = value;
+            
+            if (key == "type") relation.type = value;
+            if (key == "route") relation.route_type = value;
+        }
+        
+        // Process relation members
+        for (pugi::xml_node member = rel.child("member"); member; member = member.next_sibling("member")) {
+            RelationMember rel_member;
+            rel_member.type = member.attribute("type").value();
+            rel_member.ref = member.attribute("ref").as_ullong();
+            rel_member.role = member.attribute("role").value();
+            relation.members.push_back(rel_member);
+        }
+        
+        relations.push_back(relation);
+    }
+
+    // Process relations after all nodes and ways are loaded
+    for (const auto& relation : relations) {
+        process_public_transport_relation(relation, kd_tree, node_id_to_index, node_tags);
     }
 
     std::cout << std::endl; // Move to the next line after progress is complete

@@ -17,6 +17,20 @@ struct Edge {
     double weight;
 };
 
+struct RelationMember {
+    std::string type;
+    uint64_t ref;
+    std::string role;
+};
+
+struct Relation {
+    uint64_t id;
+    std::string type;
+    std::string route_type;
+    std::vector<RelationMember> members;
+    std::unordered_map<std::string, std::string> tags;
+};
+
 // Function declarations with whitelist parameters and correct node_tags type
 std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                const std::unordered_map<uint64_t, std::string>& node_tags,
@@ -49,5 +63,10 @@ uint64_t get_nearest_node_id(const KdTree& kd_tree, double lat, double lon,
 
 // Declare the function to generate the place name dictionary
 void generate_place_name_dictionary(const std::string& osm_filepath, const std::string& output_file);
+
+void process_public_transport_relation(const Relation& relation,
+                                     KdTree& kd_tree,
+                                     const std::unordered_map<uint64_t, uint32_t>& node_id_to_index,
+                                     std::unordered_map<uint64_t, std::string>& node_tags);
 
 #endif // PATH_FINDING_H
