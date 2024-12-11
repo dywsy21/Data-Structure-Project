@@ -17,6 +17,14 @@
 
 extern std::vector<uint64_t> index_to_node_id;
 
+static const std::unordered_set<std::string> pedes_white_list = {"pedestrian", "footway", "steps", "path", "living_street", "primary", "secondary", "tertiary", "residential", "track", "service", "road", "bridleway", "steps", "corridor", "sidewalk", "crossing", "traffic_island", "both", "left", "right", "trunk", "motorway", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link", "share_busway", "shared_lane", "no", "unclassified"};
+
+static const std::unordered_set<std::string> riding_white_list = {"cycleway", "path", "track", "residential", "living_street", "motorway_link", "trunk", "primary", "secondary", "tertiary", "motorway", "service", "road", "bridleway", "lane", "share_busway", "shared_lane", "opposite_lane", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link", "crossing", "no", "unclassified", "footway"};
+
+static const std::unordered_set<std::string> driving_white_list = {"motorway", "trunk", "primary", "secondary", "tertiary", "residential", "service", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link", "road", "path", "both", "left", "right", "escape", "unclassified", "shared_lane", "shared_busway", "no", "living_street", "raceway"};
+
+static const std::unordered_set<std::string> pub_transport_white_list = {"bus_stop", "motorway_junction", "traffic_signals", "crossing", "railway", "tram_stop", "subway_entrance", "busway", "bus_guideway", "share_busway"};
+
 // Function to calculate the Haversine distance between two points
 double haversine_distance(double lat1, double lon1, double lat2, double lon2) {
     const double R = 6371000.0; // Earth's radius in meters
@@ -256,24 +264,16 @@ bool load_graph(const std::string& filepath,
     return true;
 }
 
+
 // Helper function to determine if a node is allowed based on whitelist
 bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::string>& node_tags,
                     bool pedestrian, bool riding, bool driving, bool pubTransport) {
     // return true;
+    if(pedestrian && riding && driving && pubTransport) return true;
     auto it = node_tags.find(node_id);
     if (it == node_tags.end()) return false;
 
     const std::string& v = it->second;
-
-    // cycleway: lane, lane_opposite, track, shared_busway, shared_lane
-
-    static const std::unordered_set<std::string> pedes_white_list = {"pedestrian", "footway", "steps", "path", "living_street","primary", "secondary", "tertiary", "residential", "track", "service", "road", "bridleway", "steps", "corridor", "sidewalk", "crossing", "traffic_island", "both", "left", "right", "no", "trunk", "primary", "secondary", "tertiary", "motorway", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link"};
-
-    static const std::unordered_set<std::string> riding_white_list = {"cycleway", "path", "track", "residential", "living_street", "motorway_link", "trunk", "primary", "secondary", "tertiary", "motorway", "residential", "service", "road", "footway", "bridleway", "lane", "share_busway", "shared_lane", "opposite_lane", "no", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",};
-
-    static const std::unordered_set<std::string> driving_white_list = {"motorway", "trunk", "primary", "secondary", "tertiary", "residential", "service", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link", "track", "road", "path", "crossing", "traffic_island", "both", "left", "right", "no", "escape", "unclassified"};
-
-    static const std::unordered_set<std::string> pub_transport_white_list = {"bus_stop", "motorway_junction", "traffic_signals", "crossing", "railway", "tram_stop", "subway_entrance", "busway", "bus_guideway", "share_busway"};
 
     if (pedestrian && pedes_white_list.count(v)) return true;
     if (riding && riding_white_list.count(v)) return true;

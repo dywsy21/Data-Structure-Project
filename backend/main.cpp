@@ -83,8 +83,9 @@ int main(int argc, char* argv[]) {
     // for(auto [k, v]: node_id_to_coords) {
     //     std::cout << k << " " << v.first << " " << v.second << std::endl;
     // }
-
-    while (std::cin >> algorithm >> pedestrian_enabled >> riding_enabled >> driving_enabled >> pubTransport_enabled >> node_number) { 
+    int speed_first_enabled;
+    int pedSpeed, rideSpeed, driveSpeed, pubSpeed;
+    while (std::cin >> algorithm >> pedestrian_enabled >> riding_enabled >> driving_enabled >> pubTransport_enabled >> speed_first_enabled >> pedSpeed >> rideSpeed >> driveSpeed >> pubSpeed >> node_number) { 
         try {
             if (!pedestrian_enabled && !riding_enabled && !driving_enabled && !pubTransport_enabled) {
                 for (int i = 0; i < node_number; i++) {

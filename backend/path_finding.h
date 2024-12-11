@@ -6,10 +6,13 @@
 #include <utility>
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include "k-dtree.h"
 
 extern std::vector<uint64_t> index_to_node_id;
 extern std::unordered_map<uint64_t, std::pair<double, double>> node_id_to_coords;
+
+
 
 // Define Edge structure
 struct Edge {

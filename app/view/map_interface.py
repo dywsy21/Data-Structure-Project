@@ -29,6 +29,7 @@ class MapInterface(QWidget):
         self.riding_enabled = True
         self.driving_enabled = True
         self.pubTransport_enabled = True
+        self.enable_time_first_mode = False
         self.selectedAlgorithm = None  # Add this line
         self.algorithmWarningShown = False  # Add this line
         # self.on_start_line_edit_changed = pyqtBoundSignal()
@@ -112,11 +113,6 @@ class MapInterface(QWidget):
         self.endCompleter.setMaxVisibleItems(10)
         self.endLineEdit.setCompleter(self.endCompleter)
 
-        # self.startLineEdit.searchButton.pressed.connect(self.on_start_line_edit_changed)
-        # self.endLineEdit.searchButton.pressed.connect(self.on_end_line_edit_changed)
-        # self.startLineEdit.returnPressed.connect(self.on_start_line_edit_changed)
-        # self.endLineEdit.returnPressed.connect(self.on_end_line_edit_changed)
-
         # Middle Layout for CheckBoxes
         self.middleLayout = QGridLayout()
         self.pedestrianCheckBox = CheckBox('Pedestrian', self.lowerWidget)
@@ -124,6 +120,7 @@ class MapInterface(QWidget):
         self.drivingCheckBox = CheckBox('Driving', self.lowerWidget)
         self.pubTransportCheckBox = CheckBox('Public Transport', self.lowerWidget)
         self.refreshCheckBox = CheckBox('Refresh Custom Layers (1s interval)', self.lowerWidget)
+        self.switchModeCheckBox = CheckBox('Enable Time-First Mode', self.lowerWidget)
 
         self.pedestrianCheckBox.setChecked(self.pedestrain_enabled)
         self.ridingCheckBox.setChecked(self.riding_enabled)
@@ -135,12 +132,14 @@ class MapInterface(QWidget):
         self.drivingCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
         self.pubTransportCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
         self.refreshCheckBox.stateChanged.connect(self.on_refresh_checkbox_state_changed)  # Connect the signal
+        self.switchModeCheckBox.stateChanged.connect(self.on_checkbox_state_changed)
 
         self.middleLayout.addWidget(self.pedestrianCheckBox, 0, 0)
         self.middleLayout.addWidget(self.ridingCheckBox, 0, 1)
         self.middleLayout.addWidget(self.drivingCheckBox, 1, 0)
         self.middleLayout.addWidget(self.pubTransportCheckBox, 1, 1)
         self.middleLayout.addWidget(self.refreshCheckBox, 2, 0, 1, 2)
+        self.middleLayout.addWidget(self.switchModeCheckBox, 3, 0, 1, 2)
 
         # Right Layout for Buttons
         self.rightLayout = QVBoxLayout()
@@ -867,7 +866,7 @@ class MapInterface(QWidget):
             if node != start and node != end:
                 self.sorted_middle_points.append(node)
 
-        backend_command = f'{self.selectedAlgorithm} {1 if self.pedestrain_enabled else 0} {1 if self.riding_enabled else 0} {1 if self.driving_enabled else 0} {1 if self.pubTransport_enabled else 0} {len(sorted_nodes)}'
+        backend_command = f'{self.selectedAlgorithm} {1 if self.pedestrain_enabled else 0} {1 if self.riding_enabled else 0} {1 if self.driving_enabled else 0} {1 if self.pubTransport_enabled else 0} {1 if self.enable_time_first_mode else 0} {cfg.pedestrianSpeed.value} {cfg.ridingSpeed.value} {cfg.drivingSpeed.value} {cfg.pubTransportSpeed.value} {len(sorted_nodes)}'
         for node in sorted_nodes:
             backend_command += f' {node[0]} {node[1]}'
 
@@ -1115,6 +1114,7 @@ class MapInterface(QWidget):
         self.riding_enabled = self.ridingCheckBox.isChecked()
         self.driving_enabled = self.drivingCheckBox.isChecked()
         self.pubTransport_enabled = self.pubTransportCheckBox.isChecked()
+        self.enable_time_first_mode = self.switchModeCheckBox.isChecked()
 
     def loadNamesDic(self):
         with open("E:\\BaiduSyncdisk\\Code Projects\\PyQt Projects\\Data Structure Project\\backend\\data\\place_names.txt", 'r', encoding='utf-8') as f:

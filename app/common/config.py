@@ -57,10 +57,11 @@ class Config(QConfig):
     checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
 
     # speed settings
-    pedestrianSpeed = RangeConfigItem("Speed", "PedestrianSpeed", 1, RangeValidator(1, 5))
+    pedestrianSpeed = RangeConfigItem("Speed", "PedestrianSpeed", 1, RangeValidator(1, 10))
     ridingSpeed = RangeConfigItem("Speed", "RidingSpeed", 15, RangeValidator(5, 30))
     drivingSpeed = RangeConfigItem("Speed", "DrivingSpeed", 60, RangeValidator(20, 120))
     pubTransportSpeed = RangeConfigItem("Speed", "PubTransportSpeed", 60, RangeValidator(20, 150))
+
 
 cfg = Config()
 cfg.themeMode.value = Theme.AUTO
