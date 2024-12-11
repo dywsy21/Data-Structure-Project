@@ -155,17 +155,7 @@ fn query_ways_from_db(
     println!("Phase 1: {:?}", start.elapsed());
     let start_phase2 = std::time::Instant::now();
 
-    // Determine approximation rate based on zoom level
-    let approximation_rate = match zoom {
-        14..=20 => 1,
-        12..=13 => 3,
-        10..=11 => 8,
-        8..=9 => 25,
-        6..=7 => 40,
-        4..=5 => 70,
-        2..=3 => 100,
-        _ => 120,
-    };
+    let approximation_rate = 1;
 
     // Limit the number of way_ids to process
     let mut way_ids = way_ids;
@@ -173,71 +163,71 @@ fn query_ways_from_db(
         way_ids = way_ids.into_iter().step_by(approximation_rate).collect();
     }
 
-    // Phase 2: Fetch all way_nodes and way_tags in bulk
-    let way_ids_placeholder = way_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    
-    // Fetch nodes for all ways
-    let mut node_query = format!(
-        "SELECT wn.way_id, n.lat, n.lon 
-         FROM way_nodes wn 
-         JOIN nodes n ON wn.node_id = n.id 
-         WHERE wn.way_id IN ({}) 
-         ORDER BY wn.way_id, wn.rowid",
-        way_ids_placeholder
-    );
-    let mut node_stmt = conn.prepare(&node_query).unwrap();
-    let node_rows = node_stmt
-        .query_map(
-            rusqlite::params_from_iter(way_ids.iter()),
-            |row| {
+    // Limit for SQLite variables (default is 999)
+    let max_sql_vars = 999;
+
+    // Break way_ids into chunks
+    let way_id_chunks: Vec<&[i64]> = way_ids.chunks(max_sql_vars / 2).collect();
+
+    // Initialize the maps to collect results
+    let mut way_nodes_map: HashMap<i64, Vec<(f64, f64)>> = HashMap::new();
+    let mut way_tags_map: HashMap<i64, HashMap<String, String>> = HashMap::new();
+
+    // Fetch nodes and tags for all ways in batches
+    for chunk in &way_id_chunks {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
+        // Fetch nodes for the current batch of way_ids
+        let node_query = format!(
+            "SELECT wn.way_id, n.lat, n.lon 
+             FROM way_nodes wn 
+             JOIN nodes n ON wn.node_id = n.id 
+             WHERE wn.way_id IN ({}) 
+             ORDER BY wn.way_id, wn.rowid",
+            placeholders
+        );
+        let mut node_stmt = conn.prepare(&node_query).unwrap();
+        let node_rows = node_stmt
+            .query_map(rusqlite::params_from_iter(chunk.iter()), |row| {
                 Ok((
                     row.get::<_, i64>(0)?, // way_id
                     row.get::<_, f64>(1)?, // lat
                     row.get::<_, f64>(2)?, // lon
                 ))
-            },
-        )
-        .unwrap();
+            })
+            .unwrap();
 
-    // Build a mapping from way_id to list of node coordinates
-    let mut way_nodes_map: HashMap<i64, Vec<(f64, f64)>> = HashMap::new();
-    for node_row in node_rows {
-        let (way_id, lat, lon) = node_row.unwrap();
-        if lat >= lat_min && lat <= lat_max && lon >= lon_min && lon <= lon_max {
+        for node_row in node_rows {
+            let (way_id, lat, lon) = node_row.unwrap();
             way_nodes_map
                 .entry(way_id)
                 .or_insert_with(Vec::new)
                 .push((lat, lon));
         }
-    }
 
-    // Fetch tags for all ways
-    let mut tag_query = format!(
-        "SELECT way_id, k, v FROM way_tags WHERE way_id IN ({})",
-        way_ids_placeholder
-    );
-    let mut tag_stmt = conn.prepare(&tag_query).unwrap();
-    let tag_rows = tag_stmt
-        .query_map(
-            rusqlite::params_from_iter(way_ids.iter()),
-            |row| {
+        // Fetch tags for the current batch of way_ids
+        let tag_query = format!(
+            "SELECT way_id, k, v FROM way_tags WHERE way_id IN ({})",
+            placeholders
+        );
+        let mut tag_stmt = conn.prepare(&tag_query).unwrap();
+        let tag_rows = tag_stmt
+            .query_map(rusqlite::params_from_iter(chunk.iter()), |row| {
                 Ok((
-                    row.get::<_, i64>(0)?, // way_id
+                    row.get::<_, i64>(0)?,    // way_id
                     row.get::<_, String>(1)?, // key
                     row.get::<_, String>(2)?, // value
                 ))
-            },
-        )
-        .unwrap();
+            })
+            .unwrap();
 
-    // Build a mapping from way_id to tags
-    let mut way_tags_map: HashMap<i64, HashMap<String, String>> = HashMap::new();
-    for tag_row in tag_rows {
-        let (way_id, key, value) = tag_row.unwrap();
-        way_tags_map
-            .entry(way_id)
-            .or_insert_with(HashMap::new)
-            .insert(key, value);
+        for tag_row in tag_rows {
+            let (way_id, key, value) = tag_row.unwrap();
+            way_tags_map
+                .entry(way_id)
+                .or_insert_with(HashMap::new)
+                .insert(key, value);
+        }
     }
 
     // Assemble the ways with their nodes and tags
@@ -354,6 +344,26 @@ fn render_map(zoom: i32, xtile: i32, ytile: i32) {
     let db_path = "E:/BaiduSyncdisk/Code Projects/PyQt Projects/Data Structure Project/backend/data/map_for_sparse.db";
     let ways = query_ways_from_db(db_path, zoom, (xtile, ytile));
 
+    // Filter ways based on 'highway' tag and zoom level
+    let filtered_ways: Vec<(Vec<(f64, f64)>, HashMap<String, String>)> = ways
+        .into_iter()
+        .filter(|(_, tags)| {
+            if zoom > 13 {
+                true // No filtering for zoom levels above 13
+            } else if let Some(highway_value) = tags.get("highway") {
+                match zoom {
+                    11..=13 => ["motorway", "trunk", "primary", "secondary", "tertiary"].contains(&highway_value.as_str()),
+                    8..=10 => ["motorway", "trunk", "primary", "secondary"].contains(&highway_value.as_str()),
+                    5..=7 => ["motorway", "trunk", "primary"].contains(&highway_value.as_str()),
+                    _ if zoom < 6 => highway_value == "motorway" || highway_value == "trunk",
+                    _ => false,
+                }
+            } else {
+                false // Exclude ways without 'highway' tag
+            }
+        })
+        .collect();
+
     let start2 = std::time::Instant::now();
 
     let root = BitMapBackend::new(&cache_file_path, (scene_width as u32, scene_height as u32)).into_drawing_area();
@@ -377,7 +387,7 @@ fn render_map(zoom: i32, xtile: i32, ytile: i32) {
     let mut name_tags = Vec::new();
     let mut rendered_names = HashSet::new();
 
-    for (nodes_coord, tags) in ways {
+    for (nodes_coord, tags) in filtered_ways {
         let mut points = Vec::new();
         for (lat, lon) in &nodes_coord {
             let (x, y) = map_to_scene(*lat, *lon, min_lat, max_lat, min_lon, max_lon, scene_width, scene_height);
