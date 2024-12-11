@@ -283,10 +283,30 @@ bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::s
     return false;
 }
 
+double get_factor(uint64_t node_id, const std::unordered_map<uint64_t, std::string>& node_tags,
+                    bool pedestrian, bool riding, bool driving, bool pubTransport,
+                    int pedSpeed, int rideSpeed, int driveSpeed, int pubSpeed) {
+
+    auto it = node_tags.find(node_id);
+    if (it == node_tags.end()) return 1.0;
+
+    const std::string& v = it->second;
+
+    double ret = 1.0;
+    if (pedestrian && pedes_white_list.count(v))           ret = 1 / pedSpeed;
+    if (riding && riding_white_list.count(v))              ret = 1 / rideSpeed;
+    if (driving && driving_white_list.count(v))            ret = 1 / driveSpeed;
+    if (pubTransport && pub_transport_white_list.count(v)) ret = 1 / pubSpeed;
+
+    return ret;
+}
+
+
 // Function to find the shortest path using Dijkstra's algorithm
 std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                const std::unordered_map<uint64_t, std::string>& node_tags,
-                               bool pedestrian, bool riding, bool driving, bool pubTransport) {
+                               bool pedestrian, bool riding, bool driving, bool pubTransport,
+                               bool speed_first_enabled, int pedSpeed, int rideSpeed, int driveSpeed, int pubSpeed) {
     std::vector<double> distances(kd_tree.size(), std::numeric_limits<double>::infinity());
     std::vector<uint32_t> previous(kd_tree.size(), -1);
     std::priority_queue<std::pair<double, uint32_t>,
@@ -319,7 +339,12 @@ std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t e
 
         for (const auto& edge : kd_tree.getEdges(current)) {
             uint32_t neighbor = edge.first;
-            double new_dist = dist + edge.second;
+            double weight = edge.second;
+            if (speed_first_enabled) {
+                uint64_t neighbor_id = index_to_node_id[neighbor];
+                weight *= get_factor(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
+            }
+            double new_dist = dist + weight;
 
             // Get node_id from index_to_node_id
             uint64_t neighbor_id = index_to_node_id[neighbor];
@@ -383,7 +408,8 @@ std::vector<uint32_t> dijkstra(const KdTree& kd_tree, uint32_t start, uint32_t e
 std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end,
                              const std::vector<std::pair<double, double>>& coords,
                              const std::unordered_map<uint64_t, std::string>& node_tags,
-                             bool pedestrian, bool riding, bool driving, bool pubTransport) {
+                             bool pedestrian, bool riding, bool driving, bool pubTransport,
+                             bool speed_first_enabled, int pedSpeed, int rideSpeed, int driveSpeed, int pubSpeed) {
     // Haversine distance heuristic
     auto heuristic = [&kd_tree](uint32_t a, uint32_t b) {
         const double R = 6371000.0; // Earth's radius in meters
@@ -464,7 +490,12 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
         for (const auto& edge : kd_tree.getEdges(current_start)) {
             if (closed_set_start.find(edge.first) != closed_set_start.end()) continue;
 
-            float tentative_g_score = g_score_start[current_start] + edge.second;
+            float weight = edge.second;
+            if (speed_first_enabled) {
+                uint64_t neighbor_id = index_to_node_id[edge.first];
+                weight *= get_factor(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
+            }
+            float tentative_g_score = g_score_start[current_start] + weight;
 
             // Get node_id from index_to_node_id
             uint64_t neighbor_id = index_to_node_id[edge.first];
@@ -514,7 +545,12 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
         for (const auto& edge : kd_tree.getEdges(current_end)) {
             if (closed_set_end.find(edge.first) != closed_set_end.end()) continue;
 
-            float tentative_g_score = g_score_end[current_end] + edge.second;
+            float weight = edge.second;
+            if (speed_first_enabled) {
+                uint64_t neighbor_id = index_to_node_id[edge.first];
+                weight *= get_factor(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
+            }
+            float tentative_g_score = g_score_end[current_end] + weight;
 
             // Get node_id from index_to_node_id
             uint64_t neighbor_id = index_to_node_id[edge.first];
@@ -538,7 +574,8 @@ std::vector<uint32_t> a_star(const KdTree& kd_tree, uint32_t start, uint32_t end
 // Function to find the shortest path using Bellman-Ford algorithm
 std::vector<uint32_t> bellman_ford(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                    const std::unordered_map<uint64_t, std::string>& node_tags,
-                                   bool pedestrian, bool riding, bool driving, bool pubTransport) {
+                                   bool pedestrian, bool riding, bool driving, bool pubTransport,
+                                   bool speed_first_enabled, int pedSpeed, int rideSpeed, int driveSpeed, int pubSpeed) {
     std::vector<float> distances(kd_tree.size(), std::numeric_limits<float>::infinity());
     std::vector<uint32_t> previous(kd_tree.size(), -1);
 
@@ -555,8 +592,13 @@ std::vector<uint32_t> bellman_ford(const KdTree& kd_tree, uint32_t start, uint32
                 if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                     continue;
 
-                if (distances[u] + edge.second < distances[edge.first]) {
-                    distances[edge.first] = distances[u] + edge.second;
+                float weight = edge.second;
+                if (speed_first_enabled) {
+                    uint64_t neighbor_id = index_to_node_id[edge.first];
+                    weight *= get_factor(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
+                }
+                if (distances[u] + weight < distances[edge.first]) {
+                    distances[edge.first] = distances[u] + weight;
                     previous[edge.first] = u;
                 }
             }
@@ -586,7 +628,8 @@ std::vector<uint32_t> bellman_ford(const KdTree& kd_tree, uint32_t start, uint32
 // Function to find the shortest path using Floyd-Warshall algorithm
 std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree, uint32_t start, uint32_t end,
                                      const std::unordered_map<uint64_t, std::string>& node_tags,
-                                     bool pedestrian, bool riding, bool driving, bool pubTransport) {
+                                     bool pedestrian, bool riding, bool driving, bool pubTransport,
+                                     bool speed_first_enabled, int pedSpeed, int rideSpeed, int driveSpeed, int pubSpeed) {
     std::vector<std::vector<float>> dist(kd_tree.size(), std::vector<float>(kd_tree.size(), std::numeric_limits<float>::infinity()));
     std::vector<std::vector<uint32_t>> next(kd_tree.size(), std::vector<uint32_t>(kd_tree.size(), -1));
 
@@ -599,7 +642,12 @@ std::vector<uint32_t> floyd_warshall(const KdTree& kd_tree, uint32_t start, uint
             if (!is_node_allowed(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport))
                 continue;
 
-            dist[u][edge.first] = edge.second;
+            float weight = edge.second;
+            if (speed_first_enabled) {
+                uint64_t neighbor_id = index_to_node_id[edge.first];
+                weight *= get_factor(neighbor_id, node_tags, pedestrian, riding, driving, pubTransport, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
+            }
+            dist[u][edge.first] = weight;
             next[u][edge.first] = edge.first;
         }
     }

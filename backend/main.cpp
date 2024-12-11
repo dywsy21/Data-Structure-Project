@@ -147,11 +147,11 @@ int main(int argc, char* argv[]) {
 
                 std::vector<uint32_t> path_segment;
                 if (algorithm == "Dijkstra") {
-                    path_segment = dijkstra(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+                    path_segment = dijkstra(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled, speed_first_enabled, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
                 } else if (algorithm == "A*") {
-                    path_segment = a_star(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_coords, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+                    path_segment = a_star(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_coords, node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled, speed_first_enabled, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
                 } else if (algorithm == "Bellman-Ford") {
-                    path_segment = bellman_ford(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled);
+                    path_segment = bellman_ford(kd_tree, node_id_to_index[start_id], node_id_to_index[end_id], node_tags, pedestrian_enabled, riding_enabled, driving_enabled, pubTransport_enabled, speed_first_enabled, pedSpeed, rideSpeed, driveSpeed, pubSpeed);
                 } else {
                     std::cout << "Unknown algorithm: " << algorithm << std::endl;
                     std::cout.flush(); // Ensure the output is flushed immediately
