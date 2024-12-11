@@ -5,7 +5,6 @@ import sys
 from PyQt5.QtCore import Qt, QTranslator, QProcess, pyqtSignal, QDir
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QApplication, QCompleter
-from idna import encode
 from qfluentwidgets import FluentTranslator, InfoBar, InfoBarPosition
 
 from app.common.config import *

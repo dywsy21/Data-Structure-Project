@@ -56,7 +56,8 @@ class MapInterface(QWidget):
 
     def initUI(self):
         self.mainLayout = QVBoxLayout(self)
-        
+        self.setLayout(self.mainLayout)  # Ensure the layout is set to the widget
+
         # Map View (75% height)
         self.browser = QWebEngineView()
         self.browser.loadFinished.connect(self.on_load_finished)
@@ -70,7 +71,7 @@ class MapInterface(QWidget):
         # Load the generated HTML file
         self.browser.setUrl(QUrl(f"file:///{os.path.abspath(map_html_path).replace(os.sep, '/')}"))
 
-        self.mainLayout.addWidget(self.browser, 4)
+        self.mainLayout.addWidget(self.browser, 4)  # Ensure the browser is added to the layout
 
         # Clear the displayed names when initializing the map
         self.selectedNodes = []  # List to store selected node IDs
@@ -187,7 +188,7 @@ class MapInterface(QWidget):
 
     def addAlgorithmsToButton(self):
             self.menu = RoundMenu(parent=self)
-            algorithms = ["Dijkstra", "A*", "Bellman-Ford", "Floyd-Warshall"]
+            algorithms = ["Dijkstra", "A*", "Bellman-Ford"]
             for algorithm in algorithms:
                 action = Action(algorithm, self)
                 action.triggered.connect(lambda checked, alg=algorithm: self.setAlgorithm(alg))
@@ -242,6 +243,7 @@ class MapInterface(QWidget):
 
     @pyqtSlot()
     def on_load_finished(self):
+        pass
         # Initialize JavaScript code to access the Folium map
         self.browser.page().runJavaScript("""
             // Redirect console messages to Python

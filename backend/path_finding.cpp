@@ -70,7 +70,9 @@ bool load_graph(const std::string& filepath,
                     strcmp(key, "cycleway") == 0 ||
                     strcmp(key, "cycleway:left") == 0 ||
                     strcmp(key, "cycleway:right") == 0 ||
-                    strcmp(key, "railway") == 0) {
+                    strcmp(key, "railway") == 0 ||
+                    strcmp(key, "footway") == 0 ||
+                    strcmp(key, "sidewalk") == 0) {
                     has_relevant_tag = true;
                     break;
                 }
@@ -129,7 +131,9 @@ bool load_graph(const std::string& filepath,
                     strcmp(key, "cycleway") == 0 ||
                     strcmp(key, "cycleway:left") == 0 ||
                     strcmp(key, "cycleway:right") == 0 ||
-                    strcmp(key, "railway") == 0) {
+                    strcmp(key, "railway") == 0 ||
+                    strcmp(key, "footway") == 0 ||
+                    strcmp(key, "sidewalk") == 0){
                     has_relevant_tag = true;
                     way_type = value;
                     break;
@@ -182,32 +186,26 @@ bool load_graph(const std::string& filepath,
 // Helper function to determine if a node is allowed based on whitelist
 bool is_node_allowed(uint64_t node_id, const std::unordered_map<uint64_t, std::string>& node_tags,
                     bool pedestrian, bool riding, bool driving, bool pubTransport) {
+    // return true;
     auto it = node_tags.find(node_id);
     if (it == node_tags.end()) return false;
 
-    const std::string& highway_type = it->second;
+    const std::string& v = it->second;
 
-    if (pedestrian && (highway_type == "pedestrian" || highway_type == "footway" ||
-                      highway_type == "steps" || highway_type == "path" ||
-                      highway_type == "living_street" ||
-                   highway_type == "residential"))
-        return true;
-    if (riding && (highway_type == "cycleway" || highway_type == "path" ||
-                  highway_type == "track" ||
-                   highway_type == "residential"||
-                      highway_type == "living_street" || highway_type == "cycleway:left" ||
-                   highway_type == "cycleway:right"))
-        return true;
-    if (driving && (highway_type == "motorway" || highway_type == "trunk" ||
-                   highway_type == "primary" || highway_type == "secondary" ||
-                   highway_type == "tertiary" || highway_type == "service" ||
-                   highway_type == "motorway_link" || highway_type == "trunk_link" ||
-                   highway_type == "primary_link" || highway_type == "secondary_link" ||
-                   highway_type == "residential"))
-        return true;
-    if (pubTransport && (highway_type == "bus_stop" || highway_type == "motorway_junction" ||
-                        highway_type == "traffic_signals" || highway_type == "crossing" || highway_type == "railway"))
-        return true;
+    // cycleway: lane, lane_opposite, track, shared_busway, shared_lane
+
+    static const std::unordered_set<std::string> pedes_white_list = {"pedestrian", "footway", "steps", "path", "living_street","primary", "secondary", "tertiary", "residential", "track", "service", "road", "bridleway", "steps", "corridor", "sidewalk", "crossing", "traffic_island", "both", "left", "right", "no", "trunk", "primary", "secondary", "tertiary", "motorway", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link"};
+
+    static const std::unordered_set<std::string> riding_white_list = {"cycleway", "path", "track", "residential", "living_street", "motorway_link", "trunk", "primary", "secondary", "tertiary", "motorway", "residential", "service", "road", "footway", "bridleway", "lane", "share_busway", "shared_lane", "opposite_lane", "no", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",};
+
+    static const std::unordered_set<std::string> driving_white_list = {"motorway", "trunk", "primary", "secondary", "tertiary", "residential", "service", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link", "track", "road", "path", "crossing", "traffic_island", "both", "left", "right", "no", "escape", "unclassified"};
+
+    static const std::unordered_set<std::string> pub_transport_white_list = {"bus_stop", "motorway_junction", "traffic_signals", "crossing", "railway", "tram_stop", "subway_entrance", "busway", "bus_guideway", "share_busway"};
+
+    if (pedestrian && pedes_white_list.count(v)) return true;
+    if (riding && riding_white_list.count(v)) return true;
+    if (driving && driving_white_list.count(v)) return true;
+    if (pubTransport && pub_transport_white_list.count(v)) return true;
 
     return false;
 }

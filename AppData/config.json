@@ -8,8 +8,8 @@
         "MicaEnabled": false
     },
     "Speed": {
-        "DrivingSpeed": 120,
-        "PedestrianSpeed": 1,
+        "DrivingSpeed": 106,
+        "PedestrianSpeed": 3,
         "PubTransportSpeed": 101,
         "RidingSpeed": 17
     },
