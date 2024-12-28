@@ -10,3 +10,16 @@ map*
 map_large
 renderer/cache/*
 renderer_sparse/cache/*
+target
+target/*
+rendered_tile.png
+PJ报告及面试要求说明.md
+README.pdf
+.gitignore
+*.filters
+*.vcxproj
+*.sln
+cmake_install.cmake
+cmake.md
+CMakeCache.txt
+

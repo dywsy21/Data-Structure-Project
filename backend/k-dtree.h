@@ -4,9 +4,14 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include <queue> // Include for priority_queue
-#include <utility> // Include for pair
+#include <queue>
+#include <utility>
 #include <iostream>
+#include <functional>
+#include <boost/serialization/access.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/utility.hpp>
+#include <boost/serialization/split_member.hpp>
 
 class KdTree {
 public:
@@ -25,23 +30,35 @@ public:
     const std::vector<double>& getPoint(uint32_t index) const;
     std::vector<std::vector<double>> findKthNearestNeighbor(const std::vector<double>& point, int k) const;
 
-    std::vector<std::vector<double>> points; // Add this line to declare the points member variable
+    std::vector<std::vector<double>> points;
+
+    void rebuildIndexMap();  // One-pass rebuild after load
 
 private:
     struct Node {
         std::vector<double> point;
-        uint32_t index; // Add this line
+        uint32_t index;
         std::unique_ptr<Node> left;
         std::unique_ptr<Node> right;
         std::vector<std::pair<uint32_t, double>> edges;
 
         Node(const std::vector<double>& point, uint32_t index)
             : point(point), index(index), left(nullptr), right(nullptr) {}
+
+    private:
+        friend class boost::serialization::access;
+        template<class Archive>
+        void serialize(Archive & ar, const unsigned int /*version*/) {
+            ar & point;
+            ar & index;
+            ar & edges;
+        }
     };
 
     std::unique_ptr<Node> root;
     int k;
     size_t tree_size;
+    std::unordered_map<uint32_t, Node*> index_to_node;
 
     std::unique_ptr<Node> insertRec(std::unique_ptr<Node> node, const std::vector<double>& point, uint32_t index, int depth);
     bool searchRec(const Node* node, const std::vector<double>& point, int depth) const;
@@ -50,7 +67,6 @@ private:
     const Node* findNearestNeighborRec(const Node* node, const std::vector<double>& point, int depth, const Node* best, double& bestDist) const;
     void findKthNearestNeighborRec(const Node* node, const std::vector<double>& point, int depth, int k,
                                    std::priority_queue<std::pair<double, const Node*>>& max_heap) const;
-    std::unordered_map<uint32_t, Node*> index_to_node; // Map indices to nodes
 
     // Define a custom key type for the cache
     struct CacheKey {
@@ -73,7 +89,39 @@ private:
         }
     };
 
-    mutable std::unordered_map<CacheKey, std::vector<std::vector<double>>, CacheKeyHash> cache; // Update cache to use custom key type
+    mutable std::unordered_map<CacheKey, std::vector<std::vector<double>>, CacheKeyHash> cache;
+
+    template<class Archive>
+    void saveNode(Archive& ar, const Node* node) const;
+
+    template<class Archive>
+    std::unique_ptr<Node> loadNode(Archive& ar);
+
+    friend class boost::serialization::access;
+    
+    template<class Archive>
+    void save(Archive& ar, const unsigned int version) const;
+
+    template<class Archive> 
+    void load(Archive& ar, const unsigned int version);
+
+    BOOST_SERIALIZATION_SPLIT_MEMBER()
 };
+
+template<class Archive>
+void KdTree::load(Archive & ar, const unsigned int /*version*/) {
+    ar & k;
+    ar & tree_size;
+    ar & points;
+    bool hasRoot;
+    ar & hasRoot;
+    if (hasRoot) {
+        root = loadNode(ar);
+    }
+    // Clear the cache to avoid unnecessary overhead
+    cache.clear();
+    // Rebuild the index map in one pass
+    rebuildIndexMap();
+}
 
 #endif // KDTREE_H

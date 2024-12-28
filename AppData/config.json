@@ -10,8 +10,8 @@
     "Speed": {
         "DrivingSpeed": 120,
         "PedestrianSpeed": 1,
-        "PubTransportSpeed": 101,
-        "RidingSpeed": 15
+        "PubTransportSpeed": 118,
+        "RidingSpeed": 5
     },
     "QFluentWidgets": {
         "ThemeColor": "#ff009faa",
