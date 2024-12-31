@@ -6,7 +6,7 @@ __pycache__
 .vscode/*
 .vscode
 backend/data/*
-map*
+map.*
 map_large
 renderer/cache/*
 renderer_sparse/cache/*

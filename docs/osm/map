@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="Overpass API 0.7.61.5 4133829e">
+<note>The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.</note>
+<meta osm_base="2023-11-12T09:34:01Z"/>
+
+  <bounds minlat="31.2931900" minlon="121.4961500" maxlat="31.2933300" maxlon="121.4966000"/>
+
+  <node id="3072108784" lat="31.2932117" lon="121.4961761" version="1" timestamp="2014-09-11T16:31:12Z" changeset="25371877" uid="2214848" user="fdulezi"/>
+  <node id="3072108785" lat="31.2932151" lon="121.4965596" version="1" timestamp="2014-09-11T16:31:12Z" changeset="25371877" uid="2214848" user="fdulezi"/>
+  <node id="3072108801" lat="31.2933021" lon="121.4961750" version="1" timestamp="2014-09-11T16:31:13Z" changeset="25371877" uid="2214848" user="fdulezi"/>
+  <node id="3072108802" lat="31.2933055" lon="121.4965585" version="1" timestamp="2014-09-11T16:31:13Z" changeset="25371877" uid="2214848" user="fdulezi"/>
+  <way id="302928377" version="1" timestamp="2014-09-11T16:31:17Z" changeset="25371877" uid="2214848" user="fdulezi">
+    <nd ref="3072108784"/>
+    <nd ref="3072108785"/>
+    <nd ref="3072108802"/>
+    <nd ref="3072108801"/>
+    <nd ref="3072108784"/>
+    <tag k="building" v="university"/>
+  </way>
+
+</osm>
